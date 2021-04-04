@@ -128,7 +128,7 @@ struct frame* create_frame(struct c63_common *cm, yuv_t *image)
 
   //struct frame *f = (frame*)malloc(sizeof(struct frame));
   struct frame *f;
-  cudaMallocManaged(&f, sizeof(struct frame), 0x02);
+  cudaMallocManaged(&f, sizeof(struct frame));//, 0x02);
 
   f->orig = image;
 

@@ -51,6 +51,7 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
     for (x = left; x < right; ++x)
     {
       int sad;
+      //cudaMallocManaged(&sad, sizeof(int)*);
       sad_block_8x8(orig + my*w+mx, ref + y*w+x, w, &sad);
 
       /* printf("(%4d,%4d) - %d\n", x, y, sad); */

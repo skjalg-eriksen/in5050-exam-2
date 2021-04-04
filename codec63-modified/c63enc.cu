@@ -10,7 +10,6 @@
 extern "C"{
 #include "c63.h"
 #include "c63_write.h"
-
 #include "common.h"
 #include "me.h"
 #include "tables.h"
@@ -89,18 +88,27 @@ static yuv_t* read_yuv(FILE *file, struct c63_common *cm)
 
   return image;
 }
-
-__host__ void aa(){
-  printf("%s\n", "TERSE");
+/*
+__device__ int var = 42;
+__global__ void kernel(void)
+{
+if (threadIdx.x == 0)
+ printf("var:%d\n", var);
 }
 
+__host__
+*/
 static void c63_encode_image(struct c63_common *cm, yuv_t *image)
 {
   /* Advance to next frame */
   destroy_frame(cm->refframe);
   cm->refframe = cm->curframe;
   cm->curframe = create_frame(cm, image);
-  aa();
+
+  //kernel<<<5,5>>>();
+  //cudaDeviceSynchronize();
+  //cudaDeviceReset();
+
   /* Check if keyframe */
   if (cm->framenum == 0 || cm->frames_since_keyframe == cm->keyframe_interval)
   {

@@ -8,7 +8,7 @@ CC = nvcc
 CFLAGS = -O1 \
           -gencode arch=compute_72,code=sm_72 \
 	  -gencode arch=compute_72,code=compute_72
-CUFLAGS = -G -rdc=true \
+CUFLAGS = -G -g -rdc=true \
           -gencode arch=compute_72,code=sm_72 \
 	  -gencode arch=compute_72,code=compute_72
 
@@ -53,6 +53,8 @@ test2:
 	nvprof --unified-memory-profiling off ./c63enc -h 288 -w 352 -o ../test.c63 -f 5 /mnt/sdcard/cipr/foreman.yuv
 
 run:
-	./c63enc -h 288 -w 352 -o ../test.c63 -f 5 ../../mjpeg/foreman.yuv
+	./c63enc -h 288 -w 352 -o ../test1.c63 -f 5 ../../mjpeg/foreman.yuv
 
+debug:
+		cuda-gdb ./c63enc --args -h 288 -w 352 -o ../test.c63 -f 5 ../../mjpeg/foreman.yuv
 	#/mnt/sdcard/cipr/foreman.yuv
