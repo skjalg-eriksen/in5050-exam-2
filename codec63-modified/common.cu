@@ -149,7 +149,7 @@ struct frame* create_frame(struct c63_common *cm, yuv_t *image)
   cudaMallocManaged(&f->recons->V, cm->vpw * cm->vph);
 
 
-  cudaMallocManaged(&f->predicted, sizeof(yuv_t), 0x02);
+  cudaMallocManaged(&f->predicted, sizeof(yuv_t));
   cudaMallocManaged(&f->predicted->Y, cm->ypw * cm->yph*sizeof(uint8_t));
   cudaMallocManaged(&f->predicted->U, cm->upw * cm->uph*sizeof(uint8_t));
   cudaMallocManaged(&f->predicted->V, cm->vpw * cm->vph*sizeof(uint8_t));

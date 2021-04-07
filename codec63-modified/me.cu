@@ -18,24 +18,16 @@ extern "C"{
 __global__ static void me_block_8x8(struct c63_common *cm,
     uint8_t *orig, uint8_t *ref, int color_component)
 {
-  int mb_x = blockIdx.x * blockDim.x + threadIdx.x;
-  int mb_y = blockIdx.y * blockDim.y + threadIdx.y;
-
-  //int _x = blockIdx.x * blockDim.x + threadIdx.x;
-  //int _y = blockIdx.y * blockDim.y + threadIdx.y;
-  //printf("x:%d - y:%d\t block(%d, %d)\n", _x, _y, thread_x, thread_y);
-
-  //mb_x = thread_x;
-  //mb_y = thread_y;
-
-
-
+  int mb_y = blockIdx.x * blockDim.x + threadIdx.x;
+  int mb_x = blockIdx.y * blockDim.y + threadIdx.y;
+  //printf("threadIdx %d, %d\n", mb_x, mb_y);
+  //printf("%d, ", color_component);
   struct macroblock *mb =
     &cm->curframe->mbs[color_component][mb_y*cm->padw[color_component]/8+mb_x];
 
   int range = cm->me_search_range;
 
-  /* Quarter resolution for chroma channels. */
+  //Quarter resolution for chroma channels.
   if (color_component > 0) { range /= 2; }
 
   int left = mb_x * 8 - range;
@@ -46,8 +38,7 @@ __global__ static void me_block_8x8(struct c63_common *cm,
   int w = cm->padw[color_component];
   int h = cm->padh[color_component];
 
-  /* Make sure we are within bounds of reference frame. TODO: Support partial
-     frame bounds. */
+  // Make sure we are within bounds of reference frame. TODO: Support partial frame bounds.
   if (left < 0) { left = 0; }
   if (top < 0) { top = 0; }
   if (right > (w - 8)) { right = w - 8; }
@@ -60,9 +51,10 @@ __global__ static void me_block_8x8(struct c63_common *cm,
 
   int best_sad = INT_MAX;
 
-
+    #pragma unroll
     for (y = top; y < bottom; ++y)
     {
+      #pragma unroll
       for (x = left; x < right; ++x)
       {
 
@@ -78,13 +70,16 @@ __global__ static void me_block_8x8(struct c63_common *cm,
 
 
 
-          //  *result = 0;
+            //*result = 0;
+            #pragma unroll
             for (int v = 0; v < 8; ++v)
             {
+              #pragma unroll
               for (int u = 0; u < 8; ++u)
               {
-              //  *result += abs(block2[v*stride+u] - block1[v*stride+u]);
+                //*result += abs(block2[v*stride+u] - block1[v*stride+u]);
                   sad  += abs(block2[v*stride+u] - block1[v*stride+u]);
+                  //__vsadu4
               }
             }
 
@@ -102,47 +97,105 @@ __global__ static void me_block_8x8(struct c63_common *cm,
     }
 
 
+
   /* Here, there should be a threshold on SAD that checks if the motion vector
      is cheaper than intraprediction. We always assume MV to be beneficial */
 
-     //printf("Using motion vector (%d, %d) with SAD %d\n", mb->mv_x, mb->mv_y, best_sad);
+  //printf("(%d,%d) Using motion vector (%d, %d) with SAD %d\n",mb_x, mb_y, mb->mv_x, mb->mv_y, best_sad);
 
-  //printf("ex--\n" );
+  //printf("BF--\n" );
+
+  //atomicCAS(&prev->next, link, mine);
   mb->use_mv = 1;
-
+  //printf("ex--\n" );
 }
 
-
+/*
+__global__ void test(int id){
+  int x = blockIdx.x * blockDim.x + threadIdx.x;
+  int y = blockIdx.y * blockDim.y + threadIdx.y;
+  for (size_t i = 0; i < 1000; i++) {
+    printf(" %d,", id);
+  }
+}*/
 
 void c63_motion_estimate(struct c63_common *cm)
 {
+  //cudaStream_t streams[3
+  //cudaStreamCreate(&streams[0]);
+  //cudaStreamCreate(&streams[1]);
+  //cudaStreamCreate(&streams[2]);
+
+  cudaStream_t y_stream, u_stream, v_stream;
+  cudaStreamCreate(&y_stream);
+  cudaStreamCreate(&u_stream);
+  cudaStreamCreate(&v_stream);
+  //printf("\n");
+/*
+  test<<<1,2,0,y_stream>>>(1);
+  test<<<1,2,0,v_stream>>>(2);
+
+  //cudaStreamSynchronize(v_stream);
+  //cudaStreamSynchronize(y_stream);
+  cudaDeviceSynchronize();
+  printf("\ndone\n");
+  exit(1);*/
   /* Compare this frame with previous reconstructed frame */
   //int mb_x, mb_y;
-
 
   // <<<block_grid_UV, thread_grid>>>
   // block_grid_UV = (upw, uph)
   // thread_grid = (8,8)
   // Block grid: NUM_8x8BLOCKSxNUM_8x8BLOCKS U and V component
   /* Luma */
-  dim3 Y_dim(cm->mb_rows, cm->mb_cols);
-  dim3 block_size(8,8);
-  me_block_8x8<<<1, Y_dim>>> (cm, cm->curframe->orig->Y,  cm->refframe->recons->Y, Y_COMPONENT);
+/*
+  struct c63_common *y_cm;
+  cudaMalloc((void**)&y_cm, sizeof(struct c63_common));
+  cudaMemcpy(y_cm,cm, sizeof(cm),cudaMemcpyHostToDevice);*/
 
-  cudaDeviceSynchronize();
+/*
+  cudaStreamAttachMemAsync(y_stream, cm);
+  cudaStreamAttachMemAsync(u_stream, cm);
+  cudaStreamAttachMemAsync(v_stream, cm);
+  cudaStreamAttachMemAsync(y_stream, cm->curframe->orig->Y);
+  cudaStreamAttachMemAsync(u_stream, cm->refframe->recons->Y);
+  cudaStreamAttachMemAsync(v_stream, Y_COMPONENT);
+
+  cudaDeviceSynchronize();*/
+
+  //cudaMemcpy(cm, sizeof(cm), cudaMemcpyHostToDevice, y_stream);
+  dim3 Y_dim(cm->mb_rows, cm->mb_cols);
+  me_block_8x8 <<<Y_dim, 1, 0 ,y_stream>>>(cm, cm->curframe->orig->Y,  cm->refframe->recons->Y, Y_COMPONENT);
+  cudaStreamSynchronize(y_stream);
+  //cudaDeviceSynchronize();
   //printf("done Y\n" );
-  //exit(1);
+  //printf("rows %d, cols %d", cm->mb_rows, cm->mb_cols);
+
+
+  //test<<<1,1>>>();
+
 
   /* Chroma */
+
   dim3 UV_dim(cm->mb_rows / 2, cm->mb_cols / 2);
-  me_block_8x8<<<1,UV_dim>>> (cm, cm->curframe->orig->U,  cm->refframe->recons->U, U_COMPONENT);
-  cudaDeviceSynchronize();
+   me_block_8x8<<<UV_dim, 1, 0, u_stream>>> (cm, cm->curframe->orig->U,  cm->refframe->recons->U, U_COMPONENT);
+  //cudaDeviceSynchronize();
+  cudaStreamSynchronize(u_stream);
   //printf("done U\n" );
 
-  me_block_8x8<<<1, UV_dim>>> (cm, cm->curframe->orig->V,  cm->refframe->recons->V, V_COMPONENT);
-  cudaDeviceSynchronize();
-  //printf("done V\n" );
+   me_block_8x8<<<UV_dim, 1, 0, v_stream>>> (cm, cm->curframe->orig->V,  cm->refframe->recons->V, V_COMPONENT);
+   cudaStreamSynchronize(v_stream);
 
+
+   //printf("sss wa?\n");
+   /*
+  cudaStreamSynchronize(u_stream);
+  cudaStreamSynchronize(v_stream);
+  cudaStreamSynchronize(y_stream);*/
+
+  //cudaDeviceReset();
+  //printf("done V\n" );
+  //cudaDeviceSynchronize();
 }
 
 /* Motion compensation for 8x8 block */
