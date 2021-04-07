@@ -13,90 +13,20 @@ extern "C"{
 #include "me.h"
 }
 
-/*
-__global__ void cuda_sad(uint8_t *block1, uint8_t *block2_, int stride, int *result, int bottom, int right){
-
-  int x = blockIdx.x * blockDim.x; + threadIdx.x;
-  int y = blockIdx.y * blockDim.y; + threadIdx.y;
-
-
-
-
-
-  //int v = threadIdx.y;
-  //int u = threadIdx.x;
-  //printf("indx:%d\tx:%d, y:%d\n",index, threadIdx.x, threadIdx.y );
-  //return;
-  //if (result[index] > 0 ){
-
-  //}
-  //int index = right > bottom ?  y*right+x : y*bottom+x ;
-  int index = y*right+x;
-  if( bottom*right < index){
-    printf("indexing error index %d when max is %d \t (%d,%d)\n", index, bottom*right-1,x,y);
-  }
-
-  if (x < right && y < bottom) {
-
-    //printf("\nidx:%d  kernel%d-%d  maxindex:%d.          (%d,%d)\n", index, right, bottom, bottom*right-1,x,y);
-
-    uint8_t *block2 = block2_ + y*stride + x; //DO I NEED TO CHANGE THIS??
-    /*__shared__ int tmp[8];
-
-    for(int i =0; i < 8; i++){
-      tmp[i] += abs(block2[v*stride+u]- block1[v*stride+u]);
-    }
-
-    __syncthreads();
-    result[index] = tmp[0] + tmp[1] + tmp[2] + tmp[3] + tmp[4] + tmp[5] + tmp[6] + tmp[7];
-
-    printf("(%d)\n",result[index]  );*/
-    //#pragma unroll
-      //int local_result = 0;
-      /*
-      result[index] = 0;
-      for (int v = 0; v < 8; ++v)
-      {
-        for (int u = 0; u < 8; ++u)
-        {
-            //printf("%s%d%s%d%s%d%s%d\n","u:", u, "\tv:", v, "\tx:", x, ",\ty:", y);
-          //  local_result += __vsadu4(block2[v*stride+u], block1[v*stride+u]);
-
-
-            result[index] += abs(block2[v*stride+u] - block1[v*stride+u]);
-            //result[index] += __vsadu4(block2[v*stride+u], block1[v*stride+u]);
-
-            //printf("%s%d%s%d%s%d\n", "sadidx:", u, ", ", v, "\t ", abs(block2[v*stride+u] - block1[v*stride+u]));
-          //  printf("idx:%d_kernel (%4d,%4d) - %d\n", index, x, y, result[index]);
-        }
-      }
-
-      //__syncthreads();
-      //result[index] = local_result;
-
-
-    //printf("%d \tkernel%d-%d\t %d\n", index, right, bottom, result[index]);
-    /*
-    if (result[index] < 10){
-      printf("kernel (%4d,%4d) - %d\n", x, y, result[index]);
-      printf("id:%d.\n", index);
-    }
-  }
-
-}*/
-
 
 /* Motion estimation for 8x8 block */
-__global__ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
+__global__ static void me_block_8x8(struct c63_common *cm,
     uint8_t *orig, uint8_t *ref, int color_component)
 {
-  int thread_x = blockIdx.x * blockDim.x; + threadIdx.x;
-  int thread_y = blockIdx.y * blockDim.y; + threadIdx.y;
-  //int x = threadIdx.x;
-  //int y = threadIdx.y;
-  //printf("%s%d%s%d\n", "x:", thread_x, ",\ty:", thread_y);
-  mb_x = thread_x;
-  mb_y = thread_y;
+  int mb_x = blockIdx.x * blockDim.x + threadIdx.x;
+  int mb_y = blockIdx.y * blockDim.y + threadIdx.y;
+
+  //int _x = blockIdx.x * blockDim.x + threadIdx.x;
+  //int _y = blockIdx.y * blockDim.y + threadIdx.y;
+  //printf("x:%d - y:%d\t block(%d, %d)\n", _x, _y, thread_x, thread_y);
+
+  //mb_x = thread_x;
+  //mb_y = thread_y;
 
 
 
@@ -130,16 +60,6 @@ __global__ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
 
   int best_sad = INT_MAX;
 
-/*
-  dim3 dimGrid(right, bottom);
-  int *cuda_r;
-  int size = sizeof(int)*bottom*right;;
-
-  cudaMallocManaged((void**)&cuda_r, size);
-  cuda_sad<<<dimGrid,1>>> (orig+ my*w+mx, ref, w, cuda_r, bottom, right);
-  cudaDeviceSynchronize();
-*/
-
 
     for (y = top; y < bottom; ++y)
     {
@@ -153,19 +73,20 @@ __global__ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
           uint8_t *block1 = orig + my*w+mx;
           uint8_t *block2 = ref + y*w+x;
 
-          int *result = &sad;
+          //int *result = &sad;
           int stride = w;
 
 
 
-            *result = 0;
+          //  *result = 0;
             for (int v = 0; v < 8; ++v)
             {
               for (int u = 0; u < 8; ++u)
               {
-                *result += abs(block2[v*stride+u] - block1[v*stride+u]);
+              //  *result += abs(block2[v*stride+u] - block1[v*stride+u]);
+                  sad  += abs(block2[v*stride+u] - block1[v*stride+u]);
               }
-          }
+            }
 
 
 
@@ -189,7 +110,6 @@ __global__ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
   //printf("ex--\n" );
   mb->use_mv = 1;
 
-  //cudaFree(cuda_r);
 }
 
 
@@ -197,62 +117,31 @@ __global__ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
 void c63_motion_estimate(struct c63_common *cm)
 {
   /* Compare this frame with previous reconstructed frame */
-  int mb_x, mb_y;
+  //int mb_x, mb_y;
 
 
-  //printf("\nrows %d\n", cm->mb_rows);
-  //printf("cols %d\n", cm->mb_cols);
-
-
-
+  // <<<block_grid_UV, thread_grid>>>
+  // block_grid_UV = (upw, uph)
+  // thread_grid = (8,8)
+  // Block grid: NUM_8x8BLOCKSxNUM_8x8BLOCKS U and V component
   /* Luma */
-/*
-  for (mb_y = 0; mb_y < cm->mb_rows; ++mb_y)
-  {
-    for (mb_x = 0; mb_x < cm->mb_cols; ++mb_x)
-    {
-      //printf("loop\tmb_y %d\tmb_x %d\n", mb_y, mb_x);
-      // <<<block_grid_Y,  thread_grid>>>
-      // thread_grid = (8,8)
-      // block_grid_Y = (width, height)
-      //Block grid: NUM_8x8BLOCKSxNUM_8x8BLOCKS Y component *
-
-      //me_block_8x8<<<1, 1>>> (cm, mb_x, mb_y, cm->curframe->orig->Y,  cm->refframe->recons->Y, Y_COMPONENT);
-    }
-  }
-*/
   dim3 Y_dim(cm->mb_rows, cm->mb_cols);
-  //me_block_8x8<<<Y_dim, 1>>> (cm, mb_x, mb_y, cm->curframe->orig->Y,  cm->refframe->recons->Y, Y_COMPONENT);
+  dim3 block_size(8,8);
+  me_block_8x8<<<1, Y_dim>>> (cm, cm->curframe->orig->Y,  cm->refframe->recons->Y, Y_COMPONENT);
 
-  //printf("done\n" );
-  //exit(1);
   cudaDeviceSynchronize();
   //printf("done Y\n" );
-
+  //exit(1);
 
   /* Chroma */
   dim3 UV_dim(cm->mb_rows / 2, cm->mb_cols / 2);
-  me_block_8x8<<<UV_dim, 1>>> (cm, mb_x, mb_y, cm->curframe->orig->U,  cm->refframe->recons->U, U_COMPONENT);
+  me_block_8x8<<<1,UV_dim>>> (cm, cm->curframe->orig->U,  cm->refframe->recons->U, U_COMPONENT);
   cudaDeviceSynchronize();
   //printf("done U\n" );
 
-  me_block_8x8<<<UV_dim, 1>>> (cm, mb_x, mb_y, cm->curframe->orig->V,  cm->refframe->recons->V, V_COMPONENT);
+  me_block_8x8<<<1, UV_dim>>> (cm, cm->curframe->orig->V,  cm->refframe->recons->V, V_COMPONENT);
   cudaDeviceSynchronize();
   //printf("done V\n" );
-
-  /*
-  for (mb_y = 0; mb_y < cm->mb_rows / 2; ++mb_y)
-  {
-    for (mb_x = 0; mb_x < cm->mb_cols / 2; ++mb_x)
-    {
-      // <<<block_grid_UV, thread_grid>>>
-      // block_grid_UV = (upw, uph)
-      // thread_grid = (8,8)
-      // Block grid: NUM_8x8BLOCKSxNUM_8x8BLOCKS U and V component
-      me_block_8x8<<<1,  1>>>(cm, mb_x, mb_y, cm->curframe->orig->U,  cm->refframe->recons->U, U_COMPONENT);
-      me_block_8x8<<<1,  1>>>(cm, mb_x, mb_y, cm->curframe->orig->V,  cm->refframe->recons->V, V_COMPONENT);
-    }
-  }*/
 
 }
 
