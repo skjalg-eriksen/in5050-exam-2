@@ -98,75 +98,26 @@ __global__ static void me_block_8x8(struct c63_common *cm,
   mb->use_mv = 1;
 }
 
-/*
-__global__ void test(int id){
-  int x = blockIdx.x * blockDim.x + threadIdx.x;
-  int y = blockIdx.y * blockDim.y + threadIdx.y;
-  for (size_t i = 0; i < 1000; i++) {
-    printf(" %d,", id);
-  }
-}*/
 
 void c63_motion_estimate(struct c63_common *cm)
 {
-  //cudaStream_t streams[3
-  //cudaStreamCreate(&streams[0]);
-  //cudaStreamCreate(&streams[1]);
-  //cudaStreamCreate(&streams[2]);
+
 
   cudaStream_t y_stream, u_stream, v_stream;
   cudaStreamCreate(&y_stream);
   cudaStreamCreate(&u_stream);
   cudaStreamCreate(&v_stream);
-/*  cudaEvent_t start;
-  cudaEventCreate(&start);
-
-  cudaStreamWaitEvent(y_stream, start,0);
-  cudaStreamWaitEvent(u_stream, start,0);
-  cudaStreamWaitEvent(v_stream, start,0);
-  */
-/*
-  test<<<1,2,0,y_stream>>>(1);
-  test<<<1,2,0,v_stream>>>(2);
-
-  //cudaStreamSynchronize(v_stream);
-  //cudaStreamSynchronize(y_stream);
-  cudaDeviceSynchronize();
-  printf("\ndone\n");
-  exit(1);*/
-  /* Compare this frame with previous reconstructed frame */
-  //int mb_x, mb_y;
-
-  // <<<block_grid_UV, thread_grid>>>
-  // block_grid_UV = (upw, uph)
-  // thread_grid = (8,8)
-  // Block grid: NUM_8x8BLOCKSxNUM_8x8BLOCKS U and V component
-
-/*
-  struct c63_common *y_cm;
-  cudaMalloc((void**)&y_cm, sizeof(struct c63_common));
-  cudaMemcpy(y_cm,cm, sizeof(cm),cudaMemcpyHostToDevice);*/
 
 
-  /* cudaStreamAttachMemAsync(y_stream, cm);
-  cudaStreamAttachMemAsync(u_stream, cm);
-  cudaStreamAttachMemAsync(v_stream, cm);
- cudaStreamAttachMemAsync(y_stream, cm->curframe->orig->Y);
-  cudaStreamAttachMemAsync(u_stream, cm->refframe->recons->Y);
-  cudaStreamAttachMemAsync(v_stream, Y_COMPONENT);*/
-
-  //cudaDeviceSynchronize();
-
-
-  //cudaMemcpy(cm, sizeof(cm), cudaMemcpyHostToDevice, y_stream);
+  /* Luma */
   dim3 Y_dim(cm->mb_rows, cm->mb_cols);
 
   me_block_8x8 <<<Y_dim, 1, 0 ,y_stream>>>(cm, cm->curframe->orig->Y,  cm->refframe->recons->Y, Y_COMPONENT);
   cudaStreamSynchronize(y_stream);
 
   /* Chroma */
-
   dim3 UV_dim(cm->mb_rows / 2, cm->mb_cols / 2);
+
    me_block_8x8<<<UV_dim, 1, 0, u_stream>>> (cm, cm->curframe->orig->U,  cm->refframe->recons->U, U_COMPONENT);
   //cudaDeviceSynchronize();
   cudaStreamSynchronize(u_stream);
@@ -175,20 +126,6 @@ void c63_motion_estimate(struct c63_common *cm)
    cudaStreamSynchronize(v_stream);
 
 
-/*
-   cudaEventRecord(start, y_stream);
-   cudaEventRecord(start, u_stream);
-   cudaEventRecord(start, v_stream);
-*/
-   //printf("sss wa?\n");
-/*
-  cudaStreamSynchronize(u_stream);
-  cudaStreamSynchronize(v_stream);
-  cudaStreamSynchronize(y_stream);*/
-
-  //cudaDeviceReset();
-  //printf("done V\n" );
-  //cudaDeviceSynchronize();
 }
 
 /* Motion compensation for 8x8 block */
