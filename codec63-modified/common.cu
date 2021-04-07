@@ -7,14 +7,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-extern "C" {
-#include "common.h"
-#include "dsp.h"
-}
+//extern "C" {}
+#include "common.cuh"
+#include "dsp.cuh"
 #include <cuda_runtime.h>
 
 
-void dequantize_idct_row(int16_t *in_data, uint8_t *prediction, int w, int h,
+__device__ void dequantize_idct_row(int16_t *in_data, uint8_t *prediction, int w, int h,
     int y, uint8_t *out_data, uint8_t *quantization)
 {
   int x;
@@ -43,21 +42,23 @@ void dequantize_idct_row(int16_t *in_data, uint8_t *prediction, int w, int h,
       }
     }
   }
+
 }
 
-void dequantize_idct(int16_t *in_data, uint8_t *prediction, uint32_t width,
+__global__ void dequantize_idct(int16_t *in_data, uint8_t *prediction, uint32_t width,
     uint32_t height, uint8_t *out_data, uint8_t *quantization)
 {
-  int y;
-
-  for (y = 0; y < height; y += 8)
-  {
+  //int y;
+  int y = threadIdx.x;
+  //for (y = 0; y < height; y += 8)
+  //{
     dequantize_idct_row(in_data+y*width, prediction+y*width, width, height, y,
         out_data+y*width, quantization);
-  }
+  //}
+  //__syncthreads();
 }
 
-void dct_quantize_row(uint8_t *in_data, uint8_t *prediction, int w, int h,
+__device__ void dct_quantize_row(uint8_t *in_data, uint8_t *prediction, int w, int h,
     int16_t *out_data, uint8_t *quantization)
 {
   int x;
@@ -83,17 +84,37 @@ void dct_quantize_row(uint8_t *in_data, uint8_t *prediction, int w, int h,
     dct_quant_block_8x8(block, out_data+(x*8), quantization);
   }
 }
+/*
+__global__ void cuda_dct(uint8_t *in_data, uint8_t *prediction, uint32_t width,
+    uint32_t height, int16_t *out_data, uint8_t *quantization){
+      int y;
+      for (y = 0; y < height; y += 8)
+      {
+        dct_quantize_row(in_data+y*width, prediction+y*width, width, height,
+            out_data+y*width, quantization);
+      }
+    }
+*/
 
-void dct_quantize(uint8_t *in_data, uint8_t *prediction, uint32_t width,
+
+__global__ void dct_quantize(uint8_t *in_data, uint8_t *prediction, uint32_t width,
     uint32_t height, int16_t *out_data, uint8_t *quantization)
 {
-  int y;
+  int y = threadIdx.x;
+  //printf("%d\n",y );
+  /*cuda_dct<<<1,1>>>(in_data,prediction,  width,
+       height, out_data, quantization);
+  cudaDeviceSynchronize();*/
 
-  for (y = 0; y < height; y += 8)
-  {
+  //int y;
+
+  //for (y = 0; y < height; y += 8)
+  //{
+
     dct_quantize_row(in_data+y*width, prediction+y*width, width, height,
         out_data+y*width, quantization);
-  }
+        //__syncthreads();
+  //}
 }
 
 void destroy_frame(struct frame *f)

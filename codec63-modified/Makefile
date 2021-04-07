@@ -3,9 +3,9 @@
 
 # CC = gcc  # To specify compiler use: '$ CC=clang make clean all'
 #CFLAGS = -O1 -fno-tree-vectorize -march=armv8.2-a -Wall -g
-#-G -g
+#-G -g -pg
 CC = nvcc
-CFLAGS = -O1 \
+CFLAGS =  -O1 \
           -gencode arch=compute_72,code=sm_72 \
 	  -gencode arch=compute_72,code=compute_72
 CUFLAGS = -rdc=true \
@@ -26,7 +26,7 @@ DEPENDENCIES = $(addprefix .,$(SOURCES:.c=.d))  # Add dot prefix to hide files.
 
 .PHONY: clean  all
 
-all: c63enc c63dec c63pred
+all: c63enc # c63dec c63pred
 
 %.o: %.cu
 	$(CC) $(CFLAGS) $(CUFLAGS) -c $<

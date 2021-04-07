@@ -9,10 +9,10 @@
 #include <string.h>
 
 extern "C"{
-#include "dsp.h"
+
 #include "me.h"
 }
-
+#include "dsp.cuh"
 
 /* Motion estimation for 8x8 block */
 __global__ static void me_block_8x8(struct c63_common *cm,

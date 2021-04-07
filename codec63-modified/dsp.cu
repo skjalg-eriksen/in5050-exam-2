@@ -2,14 +2,15 @@
 #include <math.h>
 #include <stdlib.h>
 
-extern "C" {
-#include "dsp.h"
-#include "tables.h"
-}
+//extern "C" {}
+
+#include "tables.cuh"
+
+#include "dsp.cuh"
 #include <cuda_profiler_api.h>
 #include <stdio.h>
 
-static void transpose_block(float *in_data, float *out_data)
+__device__ static void transpose_block(float *in_data, float *out_data)
 {
   int i, j;
 
@@ -22,7 +23,7 @@ static void transpose_block(float *in_data, float *out_data)
   }
 }
 
-static void dct_1d(float *in_data, float *out_data)
+__device__ static void dct_1d(float *in_data, float *out_data)
 {
   int i, j;
 
@@ -39,7 +40,7 @@ static void dct_1d(float *in_data, float *out_data)
   }
 }
 
-static void idct_1d(float *in_data, float *out_data)
+__device__ static void idct_1d(float *in_data, float *out_data)
 {
   int i, j;
 
@@ -56,7 +57,7 @@ static void idct_1d(float *in_data, float *out_data)
   }
 }
 
-static void scale_block(float *in_data, float *out_data)
+__device__ static void scale_block(float *in_data, float *out_data)
 {
   int u, v;
 
@@ -73,7 +74,7 @@ static void scale_block(float *in_data, float *out_data)
   }
 }
 
-static void quantize_block(float *in_data, float *out_data, uint8_t *quant_tbl)
+__device__ static void quantize_block(float *in_data, float *out_data, uint8_t *quant_tbl)
 {
   int zigzag;
 
@@ -89,7 +90,7 @@ static void quantize_block(float *in_data, float *out_data, uint8_t *quant_tbl)
   }
 }
 
-static void dequantize_block(float *in_data, float *out_data,
+__device__ static void dequantize_block(float *in_data, float *out_data,
     uint8_t *quant_tbl)
 {
   int zigzag;
@@ -106,7 +107,7 @@ static void dequantize_block(float *in_data, float *out_data,
   }
 }
 
-void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data,
+__device__ void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data,
     uint8_t *quant_tbl)
 {
   float mb[8*8] __attribute((aligned(16)));
@@ -135,7 +136,7 @@ void dct_quant_block_8x8(int16_t *in_data, int16_t *out_data,
 
 
 
-void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data,
+__device__ void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data,
     uint8_t *quant_tbl)
 {
   float mb[8*8] __attribute((aligned(16)));
