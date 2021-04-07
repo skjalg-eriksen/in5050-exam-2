@@ -52,6 +52,9 @@ test:
 test2:
 	nvprof --unified-memory-profiling off ./c63enc -h 288 -w 352 -o ../test.c63 -f 5 /mnt/sdcard/cipr/foreman.yuv
 
+test3:
+	nvprof --unified-memory-profiling off ./c63enc -h 288 -w 352 -o ../test.c63 /mnt/sdcard/cipr/foreman.yuv
+
 run:
 	./c63enc -h 288 -w 352 -o ../test1.c63 -f 5 ../../mjpeg/foreman.yuv
 

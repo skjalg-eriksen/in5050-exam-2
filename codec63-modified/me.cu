@@ -13,7 +13,7 @@ extern "C"{
 #include "me.h"
 }
 
-
+/*
 __global__ void cuda_sad(uint8_t *block1, uint8_t *block2_, int stride, int *result, int bottom, int right){
 
   int x = blockIdx.x * blockDim.x; + threadIdx.x;
@@ -53,6 +53,7 @@ __global__ void cuda_sad(uint8_t *block1, uint8_t *block2_, int stride, int *res
     printf("(%d)\n",result[index]  );*/
     //#pragma unroll
       //int local_result = 0;
+      /*
       result[index] = 0;
       for (int v = 0; v < 8; ++v)
       {
@@ -79,18 +80,26 @@ __global__ void cuda_sad(uint8_t *block1, uint8_t *block2_, int stride, int *res
     if (result[index] < 10){
       printf("kernel (%4d,%4d) - %d\n", x, y, result[index]);
       printf("id:%d.\n", index);
-    }*/
+    }
   }
 
-
-
-}
+}*/
 
 
 /* Motion estimation for 8x8 block */
-static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
+__global__ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
     uint8_t *orig, uint8_t *ref, int color_component)
 {
+  int thread_x = blockIdx.x * blockDim.x; + threadIdx.x;
+  int thread_y = blockIdx.y * blockDim.y; + threadIdx.y;
+  //int x = threadIdx.x;
+  //int y = threadIdx.y;
+  //printf("%s%d%s%d\n", "x:", thread_x, ",\ty:", thread_y);
+  mb_x = thread_x;
+  mb_y = thread_y;
+
+
+
   struct macroblock *mb =
     &cm->curframe->mbs[color_component][mb_y*cm->padw[color_component]/8+mb_x];
 
@@ -120,134 +129,118 @@ static void me_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
   int my = mb_y * 8;
 
   int best_sad = INT_MAX;
-  int best_sad_2 = INT_MAX;
 
-
+/*
   dim3 dimGrid(right, bottom);
-  /*if (right >= bottom){
-    dimGrid=(right, bottom);
-  }else{
-    dimGrid=(bottom, right);
-  }*/
-
-  //dim3 dimBlock(8, 8);
-
   int *cuda_r;
   int size = sizeof(int)*bottom*right;;
 
   cudaMallocManaged((void**)&cuda_r, size);
   cuda_sad<<<dimGrid,1>>> (orig+ my*w+mx, ref, w, cuda_r, bottom, right);
   cudaDeviceSynchronize();
-
-  //printf("RES%d\n", cuda_r[0*bottom+0]);
-
-  //exit(1);
-
-  //printf("\nbottom:%d\n", bottom);
-//  printf("right:%d\n", right);
-
+*/
 
 
     for (y = top; y < bottom; ++y)
     {
       for (x = left; x < right; ++x)
       {
-        //printf("Drad\n");
-        //int index = right > bottom ?  y*right+x : y*bottom+x ;
-        int index = y*right+x;
 
-        //printf("XY (%4d,%4d)\n", x, y);
-        //printf("aaatrin index: %d\tSIZE: %d\t\t", index, size);
-        //printf("value: %d\n", cuda_r[index]);
+          //int index = y*right+x;
 
-        int sad = 0;
+          int sad = 0;
 
-/*
-        uint8_t *block1 = orig + my*w+mx;
-        uint8_t *block2 = ref + y*w+x;
+          uint8_t *block1 = orig + my*w+mx;
+          uint8_t *block2 = ref + y*w+x;
 
-        int *result = &sad;
-        int stride = w;
+          int *result = &sad;
+          int stride = w;
 
 
-        //printf("Bfor after-sad fors\n");
-        *result = 0;
-        for (int v = 0; v < 8; ++v)
-        {
-          for (int u = 0; u < 8; ++u)
-          {
-            *result += abs(block2[v*stride+u] - block1[v*stride+u]);
+
+            *result = 0;
+            for (int v = 0; v < 8; ++v)
+            {
+              for (int u = 0; u < 8; ++u)
+              {
+                *result += abs(block2[v*stride+u] - block1[v*stride+u]);
+              }
           }
-        }*/
-    //    printf("after-sad fors\n");
-/*
-        if (cuda_r[index]==0){
-          printf(" abs (%4d,%4d) - %d\n", x, y, sad);
-          printf("Cuda (%4d,%4d) - %d\n", x, y, cuda_r[index]);
-          printf("\nzero error id %d\n", index);
-          exit(-100);
-        }
-         else if (cuda_r[index] != sad){
-          printf(" abs (%4d,%4d) - %d\n", x, y, sad);
-          printf("Cuda (%4d,%4d) - %d\n", x, y, cuda_r[index]);
-          printf("\nvalue error id %d\n", index);
-          exit(1);
-        }
-*/
-        //printf("sad - %d\n",best_sad );
 
 
-        if (cuda_r[index] < best_sad)
-      //if  (sad< best_sad)
-        {
-        //  printf("-1-\t");
-          mb->mv_x = x - mx;
-          //printf("-2-\t");
-          mb->mv_y = y - my;
-          //printf("-3-\n"
-      //    best_sad_2 = cuda_r[index];
-        //  best_sad = sad;
-          best_sad = cuda_r[index];
-        }
+
+          if  (sad< best_sad)
+          {
+            mb->mv_x = x - mx;
+
+            mb->mv_y = y - my;
+
+            best_sad = sad;
+          }
       }
     }
 
-    //    exit(1);
 
-
-
-
-    //exit(1);
   /* Here, there should be a threshold on SAD that checks if the motion vector
      is cheaper than intraprediction. We always assume MV to be beneficial */
 
-     //printf(" ABS Using motion vector (%d, %d) with SAD %d\n", mb->mv_x, mb->mv_y, best_sad);
-//     printf("CUDA Using motion vector (%d, %d) with SAD %d\n\n", mb->mv_x, mb->mv_y, best_sad_2);
+     //printf("Using motion vector (%d, %d) with SAD %d\n", mb->mv_x, mb->mv_y, best_sad);
+
   //printf("ex--\n" );
   mb->use_mv = 1;
-//  printf("EXITING\n" );
-  cudaFree(cuda_r);
+
+  //cudaFree(cuda_r);
 }
+
+
 
 void c63_motion_estimate(struct c63_common *cm)
 {
   /* Compare this frame with previous reconstructed frame */
   int mb_x, mb_y;
 
+
+  //printf("\nrows %d\n", cm->mb_rows);
+  //printf("cols %d\n", cm->mb_cols);
+
+
+
   /* Luma */
+/*
   for (mb_y = 0; mb_y < cm->mb_rows; ++mb_y)
   {
     for (mb_x = 0; mb_x < cm->mb_cols; ++mb_x)
     {
+      //printf("loop\tmb_y %d\tmb_x %d\n", mb_y, mb_x);
       // <<<block_grid_Y,  thread_grid>>>
       // thread_grid = (8,8)
       // block_grid_Y = (width, height)
       //Block grid: NUM_8x8BLOCKSxNUM_8x8BLOCKS Y component *
-      me_block_8x8(cm, mb_x, mb_y, cm->curframe->orig->Y,  cm->refframe->recons->Y, Y_COMPONENT);
+
+      //me_block_8x8<<<1, 1>>> (cm, mb_x, mb_y, cm->curframe->orig->Y,  cm->refframe->recons->Y, Y_COMPONENT);
     }
   }
+*/
+  dim3 Y_dim(cm->mb_rows, cm->mb_cols);
+  //me_block_8x8<<<Y_dim, 1>>> (cm, mb_x, mb_y, cm->curframe->orig->Y,  cm->refframe->recons->Y, Y_COMPONENT);
+
+  //printf("done\n" );
+  //exit(1);
+  cudaDeviceSynchronize();
+  //printf("done Y\n" );
+
 
   /* Chroma */
+  dim3 UV_dim(cm->mb_rows / 2, cm->mb_cols / 2);
+  me_block_8x8<<<UV_dim, 1>>> (cm, mb_x, mb_y, cm->curframe->orig->U,  cm->refframe->recons->U, U_COMPONENT);
+  cudaDeviceSynchronize();
+  //printf("done U\n" );
+
+  me_block_8x8<<<UV_dim, 1>>> (cm, mb_x, mb_y, cm->curframe->orig->V,  cm->refframe->recons->V, V_COMPONENT);
+  cudaDeviceSynchronize();
+  //printf("done V\n" );
+
+  /*
   for (mb_y = 0; mb_y < cm->mb_rows / 2; ++mb_y)
   {
     for (mb_x = 0; mb_x < cm->mb_cols / 2; ++mb_x)
@@ -255,11 +248,12 @@ void c63_motion_estimate(struct c63_common *cm)
       // <<<block_grid_UV, thread_grid>>>
       // block_grid_UV = (upw, uph)
       // thread_grid = (8,8)
-      /* Block grid: NUM_8x8BLOCKSxNUM_8x8BLOCKS U and V component */
-      me_block_8x8(cm, mb_x, mb_y, cm->curframe->orig->U,  cm->refframe->recons->U, U_COMPONENT);
-      me_block_8x8(cm, mb_x, mb_y, cm->curframe->orig->V,  cm->refframe->recons->V, V_COMPONENT);
+      // Block grid: NUM_8x8BLOCKSxNUM_8x8BLOCKS U and V component
+      me_block_8x8<<<1,  1>>>(cm, mb_x, mb_y, cm->curframe->orig->U,  cm->refframe->recons->U, U_COMPONENT);
+      me_block_8x8<<<1,  1>>>(cm, mb_x, mb_y, cm->curframe->orig->V,  cm->refframe->recons->V, V_COMPONENT);
     }
-  }
+  }*/
+
 }
 
 /* Motion compensation for 8x8 block */
