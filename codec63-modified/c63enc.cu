@@ -128,6 +128,14 @@ static void c63_encode_image(struct c63_common *cm, yuv_t *image)
     c63_motion_compensate(cm);
   }
 
+
+/*Select texture object for Y and call dct_quantize with Y grid size
+dct_quantize
+<<<block_grid_Y,  thread_grid>>>
+( Y_tex, Ydst, ypw, width, Y_QUANT  );
+
+*/
+
   /* DCT and Quantization */
   dct_quantize(image->Y, cm->curframe->predicted->Y, cm->padw[Y_COMPONENT],
       cm->padh[Y_COMPONENT], cm->curframe->residuals->Ydct,
