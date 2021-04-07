@@ -130,7 +130,13 @@ void c63_motion_estimate(struct c63_common *cm)
   cudaStreamCreate(&y_stream);
   cudaStreamCreate(&u_stream);
   cudaStreamCreate(&v_stream);
-  //printf("\n");
+/*  cudaEvent_t start;
+  cudaEventCreate(&start);
+
+  cudaStreamWaitEvent(y_stream, start,0);
+  cudaStreamWaitEvent(u_stream, start,0);
+  cudaStreamWaitEvent(v_stream, start,0);
+  */
 /*
   test<<<1,2,0,y_stream>>>(1);
   test<<<1,2,0,v_stream>>>(2);
@@ -163,16 +169,12 @@ void c63_motion_estimate(struct c63_common *cm)
 
   cudaDeviceSynchronize();*/
 
+
   //cudaMemcpy(cm, sizeof(cm), cudaMemcpyHostToDevice, y_stream);
   dim3 Y_dim(cm->mb_rows, cm->mb_cols);
   me_block_8x8 <<<Y_dim, 1, 0 ,y_stream>>>(cm, cm->curframe->orig->Y,  cm->refframe->recons->Y, Y_COMPONENT);
   cudaStreamSynchronize(y_stream);
   //cudaDeviceSynchronize();
-  //printf("done Y\n" );
-  //printf("rows %d, cols %d", cm->mb_rows, cm->mb_cols);
-
-
-  //test<<<1,1>>>();
 
 
   /* Chroma */
@@ -187,8 +189,13 @@ void c63_motion_estimate(struct c63_common *cm)
    cudaStreamSynchronize(v_stream);
 
 
+/*
+   cudaEventRecord(start, y_stream);
+   cudaEventRecord(start, u_stream);
+   cudaEventRecord(start, v_stream);
+*/
    //printf("sss wa?\n");
-   /*
+/*
   cudaStreamSynchronize(u_stream);
   cudaStreamSynchronize(v_stream);
   cudaStreamSynchronize(y_stream);*/

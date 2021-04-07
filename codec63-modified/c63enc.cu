@@ -173,7 +173,7 @@ struct c63_common* init_c63_enc(int width, int height)
   /* calloc() sets allocated memory to zero */
   //struct c63_common *cm = (c63_common*)calloc(1, sizeof(struct c63_common));
   struct c63_common *cm;
-  cudaMallocManaged(&cm, sizeof(struct c63_common));
+  cudaMallocManaged(&cm, sizeof(struct c63_common), cudaMemAttachGlobal);
 
   cm->width = width;
   cm->height = height;
