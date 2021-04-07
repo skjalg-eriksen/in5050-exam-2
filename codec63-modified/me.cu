@@ -20,8 +20,7 @@ __global__ static void me_block_8x8(struct c63_common *cm,
 {
   int mb_y = blockIdx.x * blockDim.x + threadIdx.x;
   int mb_x = blockIdx.y * blockDim.y + threadIdx.y;
-  //printf("threadIdx %d, %d\n", mb_x, mb_y);
-  //printf("%d, ", color_component);
+
   struct macroblock *mb =
     &cm->curframe->mbs[color_component][mb_y*cm->padw[color_component]/8+mb_x];
 
@@ -57,20 +56,12 @@ __global__ static void me_block_8x8(struct c63_common *cm,
       #pragma unroll
       for (x = left; x < right; ++x)
       {
-
-          //int index = y*right+x;
-
           int sad = 0;
 
           uint8_t *block1 = orig + my*w+mx;
           uint8_t *block2 = ref + y*w+x;
-
-          //int *result = &sad;
           int stride = w;
 
-
-
-            //*result = 0;
             #pragma unroll
             for (int v = 0; v < 8; ++v)
             {
@@ -84,7 +75,6 @@ __global__ static void me_block_8x8(struct c63_common *cm,
             }
 
 
-
           if  (sad< best_sad)
           {
             mb->mv_x = x - mx;
@@ -93,6 +83,8 @@ __global__ static void me_block_8x8(struct c63_common *cm,
 
             best_sad = sad;
           }
+
+
       }
     }
 
@@ -103,11 +95,7 @@ __global__ static void me_block_8x8(struct c63_common *cm,
 
   //printf("(%d,%d) Using motion vector (%d, %d) with SAD %d\n",mb_x, mb_y, mb->mv_x, mb->mv_y, best_sad);
 
-  //printf("BF--\n" );
-
-  //atomicCAS(&prev->next, link, mine);
   mb->use_mv = 1;
-  //printf("ex--\n" );
 }
 
 /*
@@ -153,29 +141,28 @@ void c63_motion_estimate(struct c63_common *cm)
   // block_grid_UV = (upw, uph)
   // thread_grid = (8,8)
   // Block grid: NUM_8x8BLOCKSxNUM_8x8BLOCKS U and V component
-  /* Luma */
+
 /*
   struct c63_common *y_cm;
   cudaMalloc((void**)&y_cm, sizeof(struct c63_common));
   cudaMemcpy(y_cm,cm, sizeof(cm),cudaMemcpyHostToDevice);*/
 
-/*
-  cudaStreamAttachMemAsync(y_stream, cm);
+
+  /* cudaStreamAttachMemAsync(y_stream, cm);
   cudaStreamAttachMemAsync(u_stream, cm);
   cudaStreamAttachMemAsync(v_stream, cm);
-  cudaStreamAttachMemAsync(y_stream, cm->curframe->orig->Y);
+ cudaStreamAttachMemAsync(y_stream, cm->curframe->orig->Y);
   cudaStreamAttachMemAsync(u_stream, cm->refframe->recons->Y);
-  cudaStreamAttachMemAsync(v_stream, Y_COMPONENT);
+  cudaStreamAttachMemAsync(v_stream, Y_COMPONENT);*/
 
-  cudaDeviceSynchronize();*/
+  //cudaDeviceSynchronize();
 
 
   //cudaMemcpy(cm, sizeof(cm), cudaMemcpyHostToDevice, y_stream);
   dim3 Y_dim(cm->mb_rows, cm->mb_cols);
+
   me_block_8x8 <<<Y_dim, 1, 0 ,y_stream>>>(cm, cm->curframe->orig->Y,  cm->refframe->recons->Y, Y_COMPONENT);
   cudaStreamSynchronize(y_stream);
-  //cudaDeviceSynchronize();
-
 
   /* Chroma */
 
@@ -183,7 +170,6 @@ void c63_motion_estimate(struct c63_common *cm)
    me_block_8x8<<<UV_dim, 1, 0, u_stream>>> (cm, cm->curframe->orig->U,  cm->refframe->recons->U, U_COMPONENT);
   //cudaDeviceSynchronize();
   cudaStreamSynchronize(u_stream);
-  //printf("done U\n" );
 
    me_block_8x8<<<UV_dim, 1, 0, v_stream>>> (cm, cm->curframe->orig->V,  cm->refframe->recons->V, V_COMPONENT);
    cudaStreamSynchronize(v_stream);
@@ -206,9 +192,12 @@ void c63_motion_estimate(struct c63_common *cm)
 }
 
 /* Motion compensation for 8x8 block */
-static void mc_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
+__global__ static void mc_block_8x8(struct c63_common *cm,
     uint8_t *predicted, uint8_t *ref, int color_component)
 {
+  int mb_y = blockIdx.x * blockDim.x + threadIdx.x;
+  int mb_x = blockIdx.y * blockDim.y + threadIdx.y;
+
   struct macroblock *mb =
     &cm->curframe->mbs[color_component][mb_y*cm->padw[color_component]/8+mb_x];
 
@@ -235,19 +224,29 @@ static void mc_block_8x8(struct c63_common *cm, int mb_x, int mb_y,
 
 void c63_motion_compensate(struct c63_common *cm)
 {
-  int mb_x, mb_y;
+  cudaStream_t y_stream, u_stream, v_stream;
+  cudaStreamCreate(&y_stream);
+  cudaStreamCreate(&u_stream);
+  cudaStreamCreate(&v_stream);
+
+  //int mb_x, mb_y;
 
   /* Luma */
-  for (mb_y = 0; mb_y < cm->mb_rows; ++mb_y)
+  /*for (mb_y = 0; mb_y < cm->mb_rows; ++mb_y)
   {
     for (mb_x = 0; mb_x < cm->mb_cols; ++mb_x)
     {
       mc_block_8x8(cm, mb_x, mb_y, cm->curframe->predicted->Y,
           cm->refframe->recons->Y, Y_COMPONENT);
     }
-  }
+  }*/
+  dim3 Y_dim(cm->mb_rows, cm->mb_cols);
+  dim3 UV_dim(cm->mb_rows / 2, cm->mb_cols / 2);
 
+  mc_block_8x8 <<<Y_dim, 1, 0 ,y_stream>>> (cm, cm->curframe->predicted->Y, cm->refframe->recons->Y, Y_COMPONENT);
+  cudaStreamSynchronize(y_stream);
   /* Chroma */
+  /*
   for (mb_y = 0; mb_y < cm->mb_rows / 2; ++mb_y)
   {
     for (mb_x = 0; mb_x < cm->mb_cols / 2; ++mb_x)
@@ -257,5 +256,9 @@ void c63_motion_compensate(struct c63_common *cm)
       mc_block_8x8(cm, mb_x, mb_y, cm->curframe->predicted->V,
           cm->refframe->recons->V, V_COMPONENT);
     }
-  }
+  }*/
+  mc_block_8x8 <<<UV_dim, 1, 0, u_stream>>>  (cm, cm->curframe->predicted->U, cm->refframe->recons->U, U_COMPONENT);
+  cudaStreamSynchronize(u_stream);
+  mc_block_8x8 <<<UV_dim, 1, 0, v_stream>>>  (cm, cm->curframe->predicted->V, cm->refframe->recons->V, V_COMPONENT);
+  cudaStreamSynchronize(v_stream);
 }

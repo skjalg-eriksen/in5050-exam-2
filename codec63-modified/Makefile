@@ -3,12 +3,12 @@
 
 # CC = gcc  # To specify compiler use: '$ CC=clang make clean all'
 #CFLAGS = -O1 -fno-tree-vectorize -march=armv8.2-a -Wall -g
-
+#-G -g
 CC = nvcc
 CFLAGS = -O1 \
           -gencode arch=compute_72,code=sm_72 \
 	  -gencode arch=compute_72,code=compute_72
-CUFLAGS = -G -g -rdc=true \
+CUFLAGS = -rdc=true \
           -gencode arch=compute_72,code=sm_72 \
 	  -gencode arch=compute_72,code=compute_72
 
