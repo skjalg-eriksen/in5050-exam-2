@@ -11,11 +11,13 @@
 //extern "C"{}
 #include "dsp.cuh"
 #include "me.cuh"
+// #include <cuda_fp16.h>
 
 /* Motion estimation for 8x8 block */
 __global__ static void me_block_8x8(struct c63_common *cm,
     uint8_t *orig, uint8_t *ref, int color_component)
 {
+  // retrive mb_y and mb_x from indexes.
   int mb_y = blockIdx.x * blockDim.x + threadIdx.x;
   int mb_x = blockIdx.y * blockDim.y + threadIdx.y;
 
@@ -42,44 +44,40 @@ __global__ static void me_block_8x8(struct c63_common *cm,
   if (bottom > (h - 8)) { bottom = h - 8; }
 
   int x, y;
+  // block pointers
+  uint8_t *block1, *block2;
 
   int mx = mb_x * 8;
   int my = mb_y * 8;
 
   int best_sad = INT_MAX;
+  int sad;
 
-    #pragma unroll
     for (y = top; y < bottom; ++y)
     {
-      #pragma unroll
       for (x = left; x < right; ++x)
       {
 
-          int sad = 0;
+          sad = 0;
+          // update block pointers
+          block1 = orig + my*w+mx;
+          block2 = ref + y*w+x;
 
-          uint8_t *block1 = orig + my*w+mx;
-          uint8_t *block2 = ref + y*w+x;
-          int stride = w;
-
+            // calculate sad block 8x8, a lot faster here than in dsp.cu
             #pragma unroll
             for (int v = 0; v < 8; ++v)
             {
               #pragma unroll
               for (int u = 0; u < 8; ++u)
               {
-                //*result += abs(block2[v*stride+u] - block1[v*stride+u]);
-                  sad  += abs(block2[v*stride+u] - block1[v*stride+u]);
-
-                  //__vsadu4 is slow!
+                  sad  += abs(block2[v*w+u] - block1[v*w+u]);
               }
             }
 
           if  (sad< best_sad)
           {
             mb->mv_x = x - mx;
-
             mb->mv_y = y - my;
-
             best_sad = sad;
           }
 
@@ -98,21 +96,23 @@ __global__ static void me_block_8x8(struct c63_common *cm,
 
 __global__ void c63_motion_estimate(struct c63_common *cm)
 {
-  // Dim for Y
+  // Dim3 for Y
   dim3 Y_dim(cm->mb_rows, cm->mb_cols);
-  // Dim for UV
+  // Dim3 for UV
   dim3 UV_dim(cm->mb_rows / 2, cm->mb_cols / 2);
 
   /* Luma */
-  // Calculate Y
+  // Calculate Y, kernel with Ydim (rows, cols) and 1 thread
   me_block_8x8 <<<Y_dim, 1>>>(cm, cm->curframe->orig->Y,
       cm->refframe->recons->Y, Y_COMPONENT);
 
+
   /* Chroma */
-  // claculate U
+  // Calculate U, kernel with Ydim (rows, cols) and 1 thread
   me_block_8x8<<<UV_dim, 1>>> (cm, cm->curframe->orig->U,
       cm->refframe->recons->U, U_COMPONENT);
-  // Calculate V
+
+  // Calculate V, kernel with Ydim (rows, cols) and 1 thread
   me_block_8x8<<<UV_dim, 1>>> (cm, cm->curframe->orig->V,
       cm->refframe->recons->V, V_COMPONENT);
 }
@@ -122,6 +122,7 @@ __global__ void c63_motion_estimate(struct c63_common *cm)
 __global__ static void mc_block_8x8(struct c63_common *cm,
     uint8_t *predicted, uint8_t *ref, int color_component)
 {
+  // retrive mb_y and mb_x from indexes.
   int mb_y = blockIdx.x * blockDim.x + threadIdx.x;
   int mb_x = blockIdx.y * blockDim.y + threadIdx.y;
 
@@ -151,37 +152,19 @@ __global__ static void mc_block_8x8(struct c63_common *cm,
 
 __global__ void c63_motion_compensate(struct c63_common *cm)
 {
-
-  //int mb_x, mb_y;
-
-  /* Luma */
-  /*for (mb_y = 0; mb_y < cm->mb_rows; ++mb_y)
-  {
-    for (mb_x = 0; mb_x < cm->mb_cols; ++mb_x)
-    {
-      mc_block_8x8(cm, mb_x, mb_y, cm->curframe->predicted->Y,
-          cm->refframe->recons->Y, Y_COMPONENT);
-    }
-  }*/
+  // Dim3 for Y
   dim3 Y_dim(cm->mb_rows, cm->mb_cols);
+  // Dim3 for UV
   dim3 UV_dim(cm->mb_rows / 2, cm->mb_cols / 2);
 
+  /* Luma */
+  // Calculate Y, kernel with Ydim (rows, cols) and 1 thread
   mc_block_8x8 <<<Y_dim, 1>>> (cm, cm->curframe->predicted->Y, cm->refframe->recons->Y, Y_COMPONENT);
 
   /* Chroma */
-  /*
-  for (mb_y = 0; mb_y < cm->mb_rows / 2; ++mb_y)
-  {
-    for (mb_x = 0; mb_x < cm->mb_cols / 2; ++mb_x)
-    {
-      mc_block_8x8(cm, mb_x, mb_y, cm->curframe->predicted->U,
-          cm->refframe->recons->U, U_COMPONENT);
-      mc_block_8x8(cm, mb_x, mb_y, cm->curframe->predicted->V,
-          cm->refframe->recons->V, V_COMPONENT);
-    }
-  }*/
+  // Calculate U, kernel with Ydim (rows, cols) and 1 thread
   mc_block_8x8 <<<UV_dim, 1>>>  (cm, cm->curframe->predicted->U, cm->refframe->recons->U, U_COMPONENT);
-
+  // Calculate V, kernel with Ydim (rows, cols) and 1 thread
   mc_block_8x8 <<<UV_dim, 1>>>  (cm, cm->curframe->predicted->V, cm->refframe->recons->V, V_COMPONENT);
 
 }

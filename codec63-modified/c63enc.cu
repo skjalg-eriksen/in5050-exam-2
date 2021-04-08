@@ -11,15 +11,11 @@
 extern "C"{
 #include "c63.h"
 #include "c63_write.h"
-
 }
 
 #include "me.cuh"
 #include "common.cuh"
 #include "tables.cuh"
-
-//#include <cuda_profiler_api.h>
-#include <cuda_runtime.h>
 
 static char *output_file, *input_file;
 FILE *outfile;
@@ -37,8 +33,10 @@ extern char *optarg;
 static yuv_t* read_yuv(FILE *file, struct c63_common *cm)
 {
   size_t len = 0;
-  //yuv_t *image = malloc(sizeof(*image));
 
+  /*
+    Allocate memory to global memory with cudaMallocManaged
+  */
   yuv_t *image;
   cudaMallocManaged(&image, sizeof(*image));
 
@@ -67,6 +65,9 @@ static yuv_t* read_yuv(FILE *file, struct c63_common *cm)
 
   if (feof(file))
   {
+    /*
+      Free memory from global memory
+    */
     cudaFree(image->Y);
     cudaFree(image->U);
     cudaFree(image->V);
@@ -79,6 +80,9 @@ static yuv_t* read_yuv(FILE *file, struct c63_common *cm)
     fprintf(stderr, "Reached end of file, but incorrect bytes read.\n");
     fprintf(stderr, "Wrong input? (height: %d width: %d)\n", height, width);
 
+    /*
+      Free memory from global memory
+    */
     cudaFree(image->Y);
     cudaFree(image->U);
     cudaFree(image->V);
@@ -94,37 +98,41 @@ __global__ void runner(struct c63_common *cm, yuv_t *image){
   if (!cm->curframe->keyframe)
   {
     /* Motion Estimation */
-    c63_motion_estimate<<<1,1>>>(cm);
+    // run motion estimate kernel with 1 grid, 1 thread
+    c63_motion_estimate<<<1 ,1>>>(cm);
 
+    // run motion compensate kernel with 1 grid, 1 thread
     /* Motion Compensation */
-    c63_motion_compensate<<<1,1>>>(cm);
+    c63_motion_compensate<<<1 ,1>>>(cm);
 
   }
 
 
     /* DCT and Quantization */
-    dct_quantize<<<1,cm->yph/8>>>(image->Y, cm->curframe->predicted->Y, cm->padw[Y_COMPONENT],
+    // amount of threads for each dct, idct kernel. one grid pr kernel.
+    int threads = cm->yph/8;
+    dct_quantize<<<1, threads>>>(image->Y, cm->curframe->predicted->Y, cm->padw[Y_COMPONENT],
         cm->padh[Y_COMPONENT], cm->curframe->residuals->Ydct,
         cm->quanttbl[Y_COMPONENT]);
 
 
-    dct_quantize<<<1,cm->yph/8>>>(image->U, cm->curframe->predicted->U, cm->padw[U_COMPONENT],
+    dct_quantize<<<1, threads>>>(image->U, cm->curframe->predicted->U, cm->padw[U_COMPONENT],
         cm->padh[U_COMPONENT], cm->curframe->residuals->Udct,
         cm->quanttbl[U_COMPONENT]);
 
 
-    dct_quantize<<<1,cm->yph/8>>>(image->V, cm->curframe->predicted->V, cm->padw[V_COMPONENT],
+    dct_quantize<<<1, threads>>>(image->V, cm->curframe->predicted->V, cm->padw[V_COMPONENT],
         cm->padh[V_COMPONENT], cm->curframe->residuals->Vdct,
         cm->quanttbl[V_COMPONENT]);
 
     /* Reconstruct frame for inter-prediction */
-    dequantize_idct<<<1,cm->yph/8>>>(cm->curframe->residuals->Ydct, cm->curframe->predicted->Y,
+    dequantize_idct<<<1, threads>>>(cm->curframe->residuals->Ydct, cm->curframe->predicted->Y,
         cm->ypw, cm->yph, cm->curframe->recons->Y, cm->quanttbl[Y_COMPONENT]);
 
-    dequantize_idct<<<1,cm->yph/8>>>(cm->curframe->residuals->Udct, cm->curframe->predicted->U,
+    dequantize_idct<<<1, threads>>>(cm->curframe->residuals->Udct, cm->curframe->predicted->U,
         cm->upw, cm->uph, cm->curframe->recons->U, cm->quanttbl[U_COMPONENT]);
 
-    dequantize_idct<<<1,cm->yph/8>>>(cm->curframe->residuals->Vdct, cm->curframe->predicted->V,
+    dequantize_idct<<<1, threads>>>(cm->curframe->residuals->Vdct, cm->curframe->predicted->V,
         cm->vpw, cm->vph, cm->curframe->recons->V, cm->quanttbl[V_COMPONENT]);
 
 
@@ -148,7 +156,11 @@ static void c63_encode_image(struct c63_common *cm, yuv_t *image)
   }
   else { cm->curframe->keyframe = 0; }
 
-  // runs motion estimate, motion compensate and dct, idct
+  /*
+    runs motion estimate, motion compensate and dct, idct.
+    encoder runs a bit faster when all the kernels are nested
+    that way we dont need to run cudaDeviceSynchronize() inbetween kernels
+  */
   runner<<<1,1>>>(cm, image);
   cudaDeviceSynchronize();
 
@@ -164,9 +176,9 @@ static void c63_encode_image(struct c63_common *cm, yuv_t *image)
 struct c63_common* init_c63_enc(int width, int height)
 {
   int i;
-
-  /* calloc() sets allocated memory to zero */
-  //struct c63_common *cm = (c63_common*)calloc(1, sizeof(struct c63_common));
+  /*
+    Allocate memory to global memory with cudaMallocManaged
+  */
   struct c63_common *cm;
   cudaMallocManaged(&cm, sizeof(struct c63_common), cudaMemAttachGlobal);
 

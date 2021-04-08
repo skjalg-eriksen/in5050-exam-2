@@ -7,7 +7,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-//extern "C" {}
 #include "common.cuh"
 #include "dsp.cuh"
 #include <cuda_runtime.h>
@@ -27,8 +26,10 @@ __device__ void dequantize_idct_row(int16_t *in_data, uint8_t *prediction, int w
 
     dequant_idct_block_8x8(in_data+(x*8), block, quantization);
 
+    #pragma unroll
     for (i = 0; i < 8; ++i)
     {
+      #pragma unroll
       for (j = 0; j < 8; ++j)
       {
         /* Add prediction block. Note: DCT is not precise -
@@ -37,7 +38,6 @@ __device__ void dequantize_idct_row(int16_t *in_data, uint8_t *prediction, int w
 
         if (tmp < 0) { tmp = 0; }
         else if (tmp > 255) { tmp = 255; }
-        //__syncthreads();
         out_data[i*w+j+x] = tmp;
       }
     }
@@ -71,8 +71,10 @@ __device__ void dct_quantize_row(uint8_t *in_data, uint8_t *prediction, int w, i
   {
     int i, j;
 
+    #pragma unroll
     for (i = 0; i < 8; ++i)
     {
+      #pragma unroll
       for (j = 0; j < 8; ++j)
       {
         block[i*8+j] = ((int16_t)in_data[i*w+j+x] - prediction[i*w+j+x]);
@@ -94,7 +96,6 @@ __global__ void dct_quantize(uint8_t *in_data, uint8_t *prediction, uint32_t wid
   // get the y value this thread is responsible for
   int y = blockIdx.x * blockDim.x + threadIdx.x * 8;
 
-
   // make sure y is not outside bounds
   if (y < height){
     dct_quantize_row(in_data+y*width, prediction+y*width, width, height, out_data+y*width, quantization);
@@ -107,6 +108,9 @@ void destroy_frame(struct frame *f)
   /* First frame doesn't have a reconstructed frame to destroy */
   if (!f) { return; }
 
+  /*
+    Free memory from global memory
+  */
   cudaFree(f->recons->Y);
   cudaFree(f->recons->U);
   cudaFree(f->recons->V);
@@ -131,24 +135,14 @@ void destroy_frame(struct frame *f)
 
 struct frame* create_frame(struct c63_common *cm, yuv_t *image)
 {
-
-  //struct frame *f = (frame*)malloc(sizeof(struct frame));
+  /*
+    Allocate memory to global memory with cudaMallocManaged
+  */
   struct frame *f;
-  cudaMallocManaged(&f, sizeof(struct frame));//, 0x02);
+  cudaMallocManaged(&f, sizeof(struct frame));
 
   f->orig = image;
 
-  /* original
-    f->recons = malloc(sizeof(yuv_t));
-    f->recons->Y = malloc(cm->ypw * cm->yph);
-    f->recons->U = malloc(cm->upw * cm->uph);
-    f->recons->V = malloc(cm->vpw * cm->vph);
-  */
-  /*cudaMallocHost(&f->recons, sizeof(yuv_t));
-  cudaMallocHost(&f->recons->Y, cm->ypw * cm->yph);
-  cudaMallocHost(&f->recons->U, cm->upw * cm->uph);
-  cudaMallocHost(&f->recons->V, cm->vpw * cm->vph);
-*/
   cudaMallocManaged(&f->recons, sizeof(yuv_t));
   cudaMallocManaged(&f->recons->Y, cm->ypw * cm->yph);
   cudaMallocManaged(&f->recons->U, cm->upw * cm->uph);
@@ -169,26 +163,6 @@ struct frame* create_frame(struct c63_common *cm, yuv_t *image)
   cudaMallocManaged(&f->mbs[U_COMPONENT], cm->mb_rows/2 * cm->mb_cols/2*sizeof(struct macroblock));
   cudaMallocManaged(&f->mbs[V_COMPONENT], cm->mb_rows/2 * cm->mb_cols/2*sizeof(struct macroblock));
 
-  /*
-  //f->predicted = (yuv_t*)malloc(sizeof(yuv_t));
-  f->predicted->Y = (uint8_t*)calloc(cm->ypw * cm->yph, sizeof(uint8_t));
-  f->predicted->U = (uint8_t*)calloc(cm->upw * cm->uph, sizeof(uint8_t));
-  f->predicted->V = (uint8_t*)calloc(cm->vpw * cm->vph, sizeof(uint8_t));
-  */
-  /*
-  f->residuals = (dct_t*)malloc(sizeof(dct_t));
-  f->residuals->Ydct = (int16_t*)calloc(cm->ypw * cm->yph, sizeof(int16_t));
-  f->residuals->Udct = (int16_t*)calloc(cm->upw * cm->uph, sizeof(int16_t));
-  f->residuals->Vdct = (int16_t*)calloc(cm->vpw * cm->vph, sizeof(int16_t));
-*/
-/*
-  f->mbs[Y_COMPONENT] =
-    (macroblock*)calloc(cm->mb_rows * cm->mb_cols, sizeof(struct macroblock));
-  f->mbs[U_COMPONENT] =
-    (macroblock*)calloc(cm->mb_rows/2 * cm->mb_cols/2, sizeof(struct macroblock));
-  f->mbs[V_COMPONENT] =
-    (macroblock*)calloc(cm->mb_rows/2 * cm->mb_cols/2, sizeof(struct macroblock));
-*/
   return f;
 }
 

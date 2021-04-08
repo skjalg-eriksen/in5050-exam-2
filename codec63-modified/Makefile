@@ -26,16 +26,16 @@ DEPENDENCIES = $(addprefix .,$(SOURCES:.c=.d))  # Add dot prefix to hide files.
 
 .PHONY: clean  all
 
-all: c63enc # c63dec c63pred
+all: c63enc c63dec c63pred
 
 %.o: %.cu
 	$(CC) $(CFLAGS) $(CUFLAGS) -c $<
 
 c63enc: c63enc.o dsp.o tables.o io.o c63_write.o common.o me.o
 	$(CC) $^ $(CFLAGS) $(LDFLAGS) -o $@
-c63dec: c63dec.c dsp.o tables.o io.o common.o me.o
+c63dec: c63dec.c dsp.c tables.c io.o common.c me.c
 	$(CC) $^ $(CFLAGS) $(LDFLAGS) -o $@
-c63pred: c63dec.c dsp.o tables.o io.o common.o me.o
+c63pred: c63dec.c dsp.c tables.c io.o common.c me.c
 	$(CC) $^ -DC63_PRED $(CFLAGS) $(LDFLAGS) -o $@
 
 #%.o: %.c
