@@ -165,7 +165,7 @@ __device__ void dequant_idct_block_8x8(int16_t *in_data, int16_t *out_data,
   #pragma unroll
   for (v = 0; v < 8; ++v) { idct_1d(mb+v*8, mb2+v*8); }
   transpose_block(mb2, mb);
-  
+
   #pragma unroll
   for (i = 0; i < 64; ++i) { out_data[i] = mb[i]; }
 }
