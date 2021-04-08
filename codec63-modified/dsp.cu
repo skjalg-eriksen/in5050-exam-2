@@ -197,18 +197,19 @@ __global__ void sad_block(uint8_t *block1, uint8_t *block2, int stride, int *res
 }
 
 
+/*
 
-
-void sad_block_8x8(uint8_t *block1, uint8_t *block2, int stride, int *result)
+__device__ void sad_block_8x8(uint8_t *block1, uint8_t *block2, int stride, int *result)
 {
   int u, v;
 
   //printf("\n");
-  int r[64];//=0;
-  int *cuda_r;
+  //int r[64];//=0;
+  //int *cuda_r;
 
   *result = 0;
-
+*/
+  /*
   cudaMallocManaged((void**)&cuda_r, (sizeof(int)*64));
 
   dim3 dimGrid(1, 1);
@@ -216,30 +217,33 @@ void sad_block_8x8(uint8_t *block1, uint8_t *block2, int stride, int *result)
 
   sad_block<<<dimGrid,dimBlock>>>(block1, block2, stride, cuda_r);
   cudaDeviceSynchronize();
-
+  */
   //cudaMemcpy(&r, cuda_r, (sizeof(int)*64), cudaMemcpyDeviceToHost);
-
+  /*
   for(int i=0; i < 64;i++){
 
     //  printf("%d\n", a[i]);
-    //*result += r[i];
+    // *result += r[i];
     *result += cuda_r[i];
   }
   //printf("\n%s%d\n", "CUDA-result:\t", *result);
   cudaFree(cuda_r);
+*/
 
 /*
-
   *result = 0;
+  #pragma unroll
   for (v = 0; v < 8; ++v)
   {
+    #pragma unroll
     for (u = 0; u < 8; ++u)
     {
       *result += abs(block2[v*stride+u] - block1[v*stride+u]);
       //printf("%s%d%s%d%s%d\n", "sadidx:", u, ", ", v, "\t ", abs(block2[v*stride+u] - block1[v*stride+u]));
     }
-  }*/
+  }
   //printf("%s%d\n", "result:\t", *result);
   //printf("\n");
 //    exit(1);
 }
+*/

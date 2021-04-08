@@ -8,11 +8,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-extern "C"{
-
-#include "me.h"
-}
+//extern "C"{}
 #include "dsp.cuh"
+#include "me.cuh"
 
 /* Motion estimation for 8x8 block */
 __global__ static void me_block_8x8(struct c63_common *cm,
@@ -56,6 +54,7 @@ __global__ static void me_block_8x8(struct c63_common *cm,
       #pragma unroll
       for (x = left; x < right; ++x)
       {
+
           int sad = 0;
 
           uint8_t *block1 = orig + my*w+mx;
@@ -70,10 +69,10 @@ __global__ static void me_block_8x8(struct c63_common *cm,
               {
                 //*result += abs(block2[v*stride+u] - block1[v*stride+u]);
                   sad  += abs(block2[v*stride+u] - block1[v*stride+u]);
-                  //__vsadu4
+
+                  //__vsadu4 is slow!
               }
             }
-
 
           if  (sad< best_sad)
           {
@@ -88,8 +87,6 @@ __global__ static void me_block_8x8(struct c63_common *cm,
       }
     }
 
-
-
   /* Here, there should be a threshold on SAD that checks if the motion vector
      is cheaper than intraprediction. We always assume MV to be beneficial */
 
@@ -99,34 +96,27 @@ __global__ static void me_block_8x8(struct c63_common *cm,
 }
 
 
-void c63_motion_estimate(struct c63_common *cm)
+__global__ void c63_motion_estimate(struct c63_common *cm)
 {
-
-
-  cudaStream_t y_stream, u_stream, v_stream;
-  cudaStreamCreate(&y_stream);
-  cudaStreamCreate(&u_stream);
-  cudaStreamCreate(&v_stream);
-
-
-  /* Luma */
+  // Dim for Y
   dim3 Y_dim(cm->mb_rows, cm->mb_cols);
-
-  me_block_8x8 <<<Y_dim, 1, 0 ,y_stream>>>(cm, cm->curframe->orig->Y,  cm->refframe->recons->Y, Y_COMPONENT);
-  cudaStreamSynchronize(y_stream);
-
-  /* Chroma */
+  // Dim for UV
   dim3 UV_dim(cm->mb_rows / 2, cm->mb_cols / 2);
 
-   me_block_8x8<<<UV_dim, 1, 0, u_stream>>> (cm, cm->curframe->orig->U,  cm->refframe->recons->U, U_COMPONENT);
-  //cudaDeviceSynchronize();
-  cudaStreamSynchronize(u_stream);
+  /* Luma */
+  // Calculate Y
+  me_block_8x8 <<<Y_dim, 1>>>(cm, cm->curframe->orig->Y,
+      cm->refframe->recons->Y, Y_COMPONENT);
 
-   me_block_8x8<<<UV_dim, 1, 0, v_stream>>> (cm, cm->curframe->orig->V,  cm->refframe->recons->V, V_COMPONENT);
-   cudaStreamSynchronize(v_stream);
-
-
+  /* Chroma */
+  // claculate U
+  me_block_8x8<<<UV_dim, 1>>> (cm, cm->curframe->orig->U,
+      cm->refframe->recons->U, U_COMPONENT);
+  // Calculate V
+  me_block_8x8<<<UV_dim, 1>>> (cm, cm->curframe->orig->V,
+      cm->refframe->recons->V, V_COMPONENT);
 }
+
 
 /* Motion compensation for 8x8 block */
 __global__ static void mc_block_8x8(struct c63_common *cm,
@@ -159,12 +149,8 @@ __global__ static void mc_block_8x8(struct c63_common *cm,
   }
 }
 
-void c63_motion_compensate(struct c63_common *cm)
+__global__ void c63_motion_compensate(struct c63_common *cm)
 {
-  cudaStream_t y_stream, u_stream, v_stream;
-  cudaStreamCreate(&y_stream);
-  cudaStreamCreate(&u_stream);
-  cudaStreamCreate(&v_stream);
 
   //int mb_x, mb_y;
 
@@ -180,8 +166,8 @@ void c63_motion_compensate(struct c63_common *cm)
   dim3 Y_dim(cm->mb_rows, cm->mb_cols);
   dim3 UV_dim(cm->mb_rows / 2, cm->mb_cols / 2);
 
-  mc_block_8x8 <<<Y_dim, 1, 0 ,y_stream>>> (cm, cm->curframe->predicted->Y, cm->refframe->recons->Y, Y_COMPONENT);
-  cudaStreamSynchronize(y_stream);
+  mc_block_8x8 <<<Y_dim, 1>>> (cm, cm->curframe->predicted->Y, cm->refframe->recons->Y, Y_COMPONENT);
+
   /* Chroma */
   /*
   for (mb_y = 0; mb_y < cm->mb_rows / 2; ++mb_y)
@@ -194,8 +180,8 @@ void c63_motion_compensate(struct c63_common *cm)
           cm->refframe->recons->V, V_COMPONENT);
     }
   }*/
-  mc_block_8x8 <<<UV_dim, 1, 0, u_stream>>>  (cm, cm->curframe->predicted->U, cm->refframe->recons->U, U_COMPONENT);
-  cudaStreamSynchronize(u_stream);
-  mc_block_8x8 <<<UV_dim, 1, 0, v_stream>>>  (cm, cm->curframe->predicted->V, cm->refframe->recons->V, V_COMPONENT);
-  cudaStreamSynchronize(v_stream);
+  mc_block_8x8 <<<UV_dim, 1>>>  (cm, cm->curframe->predicted->U, cm->refframe->recons->U, U_COMPONENT);
+
+  mc_block_8x8 <<<UV_dim, 1>>>  (cm, cm->curframe->predicted->V, cm->refframe->recons->V, V_COMPONENT);
+
 }

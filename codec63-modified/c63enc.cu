@@ -7,14 +7,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
 extern "C"{
 #include "c63.h"
 #include "c63_write.h"
 
-#include "me.h"
-
 }
 
+#include "me.cuh"
 #include "common.cuh"
 #include "tables.cuh"
 
@@ -89,26 +89,54 @@ static yuv_t* read_yuv(FILE *file, struct c63_common *cm)
 
   return image;
 }
-/*
-__device__ int var = 42;
-__global__ void kernel(void)
-{
-if (threadIdx.x == 0)
- printf("var:%d\n", var);
+
+__global__ void runner(struct c63_common *cm, yuv_t *image){
+  if (!cm->curframe->keyframe)
+  {
+    /* Motion Estimation */
+    c63_motion_estimate<<<1,1>>>(cm);
+
+    /* Motion Compensation */
+    c63_motion_compensate<<<1,1>>>(cm);
+
+  }
+
+
+    /* DCT and Quantization */
+    dct_quantize<<<1,cm->yph/8>>>(image->Y, cm->curframe->predicted->Y, cm->padw[Y_COMPONENT],
+        cm->padh[Y_COMPONENT], cm->curframe->residuals->Ydct,
+        cm->quanttbl[Y_COMPONENT]);
+
+
+    dct_quantize<<<1,cm->yph/8>>>(image->U, cm->curframe->predicted->U, cm->padw[U_COMPONENT],
+        cm->padh[U_COMPONENT], cm->curframe->residuals->Udct,
+        cm->quanttbl[U_COMPONENT]);
+
+
+    dct_quantize<<<1,cm->yph/8>>>(image->V, cm->curframe->predicted->V, cm->padw[V_COMPONENT],
+        cm->padh[V_COMPONENT], cm->curframe->residuals->Vdct,
+        cm->quanttbl[V_COMPONENT]);
+
+    /* Reconstruct frame for inter-prediction */
+    dequantize_idct<<<1,cm->yph/8>>>(cm->curframe->residuals->Ydct, cm->curframe->predicted->Y,
+        cm->ypw, cm->yph, cm->curframe->recons->Y, cm->quanttbl[Y_COMPONENT]);
+
+    dequantize_idct<<<1,cm->yph/8>>>(cm->curframe->residuals->Udct, cm->curframe->predicted->U,
+        cm->upw, cm->uph, cm->curframe->recons->U, cm->quanttbl[U_COMPONENT]);
+
+    dequantize_idct<<<1,cm->yph/8>>>(cm->curframe->residuals->Vdct, cm->curframe->predicted->V,
+        cm->vpw, cm->vph, cm->curframe->recons->V, cm->quanttbl[V_COMPONENT]);
+
+
 }
 
-__host__
-*/
+
 static void c63_encode_image(struct c63_common *cm, yuv_t *image)
 {
   /* Advance to next frame */
   destroy_frame(cm->refframe);
   cm->refframe = cm->curframe;
   cm->curframe = create_frame(cm, image);
-
-  //kernel<<<5,5>>>();
-  //cudaDeviceSynchronize();
-  //cudaDeviceReset();
 
   /* Check if keyframe */
   if (cm->framenum == 0 || cm->frames_since_keyframe == cm->keyframe_interval)
@@ -120,50 +148,9 @@ static void c63_encode_image(struct c63_common *cm, yuv_t *image)
   }
   else { cm->curframe->keyframe = 0; }
 
-  if (!cm->curframe->keyframe)
-  {
-    /* Motion Estimation */
-    c63_motion_estimate(cm);
-
-    /* Motion Compensation */
-    c63_motion_compensate(cm);
-  }
-
-
-/*Select texture object for Y and call dct_quantize with Y grid size
-dct_quantize
-<<<block_grid_Y,  thread_grid>>>
-( Y_tex, Ydst, ypw, width, Y_QUANT  );
-
-*/
-
-  /* DCT and Quantization */
-  dct_quantize<<<1,cm->yph/8>>>(image->Y, cm->curframe->predicted->Y, cm->padw[Y_COMPONENT],
-      cm->padh[Y_COMPONENT], cm->curframe->residuals->Ydct,
-      cm->quanttbl[Y_COMPONENT]);
-cudaDeviceSynchronize();
-//exit(1);
-
-  dct_quantize<<<1,cm->yph/8>>>(image->U, cm->curframe->predicted->U, cm->padw[U_COMPONENT],
-      cm->padh[U_COMPONENT], cm->curframe->residuals->Udct,
-      cm->quanttbl[U_COMPONENT]);
-cudaDeviceSynchronize();
-
-  dct_quantize<<<1,cm->yph/8>>>(image->V, cm->curframe->predicted->V, cm->padw[V_COMPONENT],
-      cm->padh[V_COMPONENT], cm->curframe->residuals->Vdct,
-      cm->quanttbl[V_COMPONENT]);
-cudaDeviceSynchronize();
-
-  /* Reconstruct frame for inter-prediction */
-  dequantize_idct<<<1,cm->yph/8>>>(cm->curframe->residuals->Ydct, cm->curframe->predicted->Y,
-      cm->ypw, cm->yph, cm->curframe->recons->Y, cm->quanttbl[Y_COMPONENT]);
-cudaDeviceSynchronize();
-  dequantize_idct<<<1,cm->yph/8>>>(cm->curframe->residuals->Udct, cm->curframe->predicted->U,
-      cm->upw, cm->uph, cm->curframe->recons->U, cm->quanttbl[U_COMPONENT]);
-      cudaDeviceSynchronize();
-  dequantize_idct<<<1,cm->yph/8>>>(cm->curframe->residuals->Vdct, cm->curframe->predicted->V,
-      cm->vpw, cm->vph, cm->curframe->recons->V, cm->quanttbl[V_COMPONENT]);
-      cudaDeviceSynchronize();
+  // runs motion estimate, motion compensate and dct, idct
+  runner<<<1,1>>>(cm, image);
+  cudaDeviceSynchronize();
 
   /* Function dump_image(), found in common.c, can be used here to check if the
      prediction is correct */

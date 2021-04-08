@@ -48,17 +48,14 @@ __device__ void dequantize_idct_row(int16_t *in_data, uint8_t *prediction, int w
 __global__ void dequantize_idct(int16_t *in_data, uint8_t *prediction, uint32_t width,
     uint32_t height, uint8_t *out_data, uint8_t *quantization)
 {
-  //int y;
-  //int y = threadIdx.x;
+  // get the y value this thread is responsible for
   int y = blockIdx.x * blockDim.x + threadIdx.x * 8;
-  //for (y = 0; y < height; y += 8)
-  //{
+
+  // make sure y is not outside bounds
   if (y < height){
     dequantize_idct_row(in_data+y*width, prediction+y*width, width, height, y,
         out_data+y*width, quantization);
   }
-
-  //}
 
 }
 
@@ -89,41 +86,20 @@ __device__ void dct_quantize_row(uint8_t *in_data, uint8_t *prediction, int w, i
 
   }
 }
-/*
-__global__ void cuda_dct(uint8_t *in_data, uint8_t *prediction, uint32_t width,
-    uint32_t height, int16_t *out_data, uint8_t *quantization){
-      int y = blockIdx.x * blockDim.x + threadIdx.x * 8;
-
-      //for (y = 0; y < height; y += 8)
-      //{
-        dct_quantize_row(in_data+y*width, prediction+y*width, width, height,
-            out_data+y*width, quantization);
-      //}
-    }*/
 
 
 __global__ void dct_quantize(uint8_t *in_data, uint8_t *prediction, uint32_t width,
     uint32_t height, int16_t *out_data, uint8_t *quantization)
 {
+  // get the y value this thread is responsible for
   int y = blockIdx.x * blockDim.x + threadIdx.x * 8;
-  //int mb_y = blockIdx.x * blockDim.x + threadIdx.x;
-  //int mb_x = blockIdx.y * blockDim.y + threadIdx.y;
-  //printf("%d\n",y );
-  //cuda_dct<<<1,height/8>>>(in_data,prediction,  width, height, out_data, quantization);
-  //cudaDeviceSynchronize();
-  /*int col = blockIdx.x * blockDim.x + threadIdx.x;
-  int row = blockIdx.y * blockDim.y + threadIdx.y;
-  int y = col + row * 1;*/
-  //int y;
 
-  //for (y = 0; y < height; y += 8)
-  //{
+
+  // make sure y is not outside bounds
   if (y < height){
     dct_quantize_row(in_data+y*width, prediction+y*width, width, height, out_data+y*width, quantization);
   }
 
-
-  //}*/
 }
 
 void destroy_frame(struct frame *f)
