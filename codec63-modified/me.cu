@@ -8,10 +8,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-//extern "C"{}
 #include "dsp.cuh"
 #include "me.cuh"
-// #include <cuda_fp16.h>
+
 
 /* Motion estimation for 8x8 block */
 __global__ static void me_block_8x8(struct c63_common *cm,
@@ -53,37 +52,35 @@ __global__ static void me_block_8x8(struct c63_common *cm,
   int best_sad = INT_MAX;
   int sad;
 
-    for (y = top; y < bottom; ++y)
+  for (y = top; y < bottom; ++y)
+  {
+    for (x = left; x < right; ++x)
     {
-      for (x = left; x < right; ++x)
-      {
 
-          sad = 0;
-          // update block pointers
-          block1 = orig + my*w+mx;
-          block2 = ref + y*w+x;
+        sad = 0;
+        // update block pointers
+        block1 = orig + my*w+mx;
+        block2 = ref + y*w+x;
 
-            // calculate sad block 8x8, a lot faster here than in dsp.cu
-            #pragma unroll
-            for (int v = 0; v < 8; ++v)
-            {
-              #pragma unroll
-              for (int u = 0; u < 8; ++u)
-              {
-                  sad  += abs(block2[v*w+u] - block1[v*w+u]);
-              }
-            }
-
-          if  (sad< best_sad)
+          // calculate sad block 8x8, a lot faster here than in dsp.cu
+          #pragma unroll
+          for (int v = 0; v < 8; ++v)
           {
-            mb->mv_x = x - mx;
-            mb->mv_y = y - my;
-            best_sad = sad;
+            #pragma unroll
+            for (int u = 0; u < 8; ++u)
+            {
+                sad  += abs(block2[v*w+u] - block1[v*w+u]);
+            }
           }
 
-
-      }
+        if  (sad< best_sad)
+        {
+          mb->mv_x = x - mx;
+          mb->mv_y = y - my;
+          best_sad = sad;
+        }
     }
+  }
 
   /* Here, there should be a threshold on SAD that checks if the motion vector
      is cheaper than intraprediction. We always assume MV to be beneficial */
@@ -96,23 +93,23 @@ __global__ static void me_block_8x8(struct c63_common *cm,
 
 __global__ void c63_motion_estimate(struct c63_common *cm)
 {
-  // Dim3 for Y
+  // Dim3 for Y, (image rows, image cols)
   dim3 Y_dim(cm->mb_rows, cm->mb_cols);
-  // Dim3 for UV
+  // Dim3 for UV, (image rows / 2, image cols / 2)    half of Ydim
   dim3 UV_dim(cm->mb_rows / 2, cm->mb_cols / 2);
 
   /* Luma */
-  // Calculate Y, kernel with Ydim (rows, cols) and 1 thread
+  // Calculate Y, kernel with Ydim and 1 thread
   me_block_8x8 <<<Y_dim, 1>>>(cm, cm->curframe->orig->Y,
       cm->refframe->recons->Y, Y_COMPONENT);
 
 
   /* Chroma */
-  // Calculate U, kernel with Ydim (rows, cols) and 1 thread
+  // Calculate U, kernel with UVdim and 1 thread
   me_block_8x8<<<UV_dim, 1>>> (cm, cm->curframe->orig->U,
       cm->refframe->recons->U, U_COMPONENT);
 
-  // Calculate V, kernel with Ydim (rows, cols) and 1 thread
+  // Calculate V, kernel with UVdim and 1 thread
   me_block_8x8<<<UV_dim, 1>>> (cm, cm->curframe->orig->V,
       cm->refframe->recons->V, V_COMPONENT);
 }
@@ -152,19 +149,19 @@ __global__ static void mc_block_8x8(struct c63_common *cm,
 
 __global__ void c63_motion_compensate(struct c63_common *cm)
 {
-  // Dim3 for Y
+  // Dim3 for Y, (image rows, image cols)
   dim3 Y_dim(cm->mb_rows, cm->mb_cols);
-  // Dim3 for UV
+  // Dim3 for UV (image rows/2, image cols/2)
   dim3 UV_dim(cm->mb_rows / 2, cm->mb_cols / 2);
 
   /* Luma */
-  // Calculate Y, kernel with Ydim (rows, cols) and 1 thread
+  // Calculate Y, kernel with Ydim and 1 thread
   mc_block_8x8 <<<Y_dim, 1>>> (cm, cm->curframe->predicted->Y, cm->refframe->recons->Y, Y_COMPONENT);
 
   /* Chroma */
-  // Calculate U, kernel with Ydim (rows, cols) and 1 thread
+  // Calculate U, kernel with UVdim and 1 thread
   mc_block_8x8 <<<UV_dim, 1>>>  (cm, cm->curframe->predicted->U, cm->refframe->recons->U, U_COMPONENT);
-  // Calculate V, kernel with Ydim (rows, cols) and 1 thread
+  // Calculate V, kernel with UVdim and 1 thread
   mc_block_8x8 <<<UV_dim, 1>>>  (cm, cm->curframe->predicted->V, cm->refframe->recons->V, V_COMPONENT);
 
 }

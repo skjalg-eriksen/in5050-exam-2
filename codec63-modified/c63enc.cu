@@ -94,6 +94,12 @@ static yuv_t* read_yuv(FILE *file, struct c63_common *cm)
   return image;
 }
 
+
+/*
+  runs motion estimate, motion compensate and dct, idct.
+  encoder runs a bit faster when all the kernels are nested
+  that way we dont need to run cudaDeviceSynchronize() inbetween kernels
+*/
 __global__ void runner(struct c63_common *cm, yuv_t *image){
   if (!cm->curframe->keyframe)
   {
@@ -109,7 +115,9 @@ __global__ void runner(struct c63_common *cm, yuv_t *image){
 
 
     /* DCT and Quantization */
-    // amount of threads for each dct, idct kernel. one grid pr kernel.
+    /*
+      amount of threads for each dct, idct kernel. one grid pr kernel and (cm->yph/8) height/8 threads.
+    */
     int threads = cm->yph/8;
     dct_quantize<<<1, threads>>>(image->Y, cm->curframe->predicted->Y, cm->padw[Y_COMPONENT],
         cm->padh[Y_COMPONENT], cm->curframe->residuals->Ydct,
