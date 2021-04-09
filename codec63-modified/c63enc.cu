@@ -100,12 +100,13 @@ static yuv_t* read_yuv(FILE *file, struct c63_common *cm)
   encoder runs a bit faster when all the kernels are nested
   that way we dont need to run cudaDeviceSynchronize() inbetween kernels
 */
-__global__ void runner(struct c63_common *cm, yuv_t *image){
+__global__ static void runner(struct c63_common *cm, yuv_t *image){
   if (!cm->curframe->keyframe)
   {
+
     /* Motion Estimation */
     // run motion estimate kernel with 1 grid, 1 thread
-    c63_motion_estimate<<<1 ,1>>>(cm);
+    c63_motion_estimate<<<1 ,3>>>(cm);
 
     // run motion compensate kernel with 1 grid, 1 thread
     /* Motion Compensation */
@@ -119,29 +120,18 @@ __global__ void runner(struct c63_common *cm, yuv_t *image){
       amount of threads for each dct, idct kernel. one grid pr kernel and (cm->yph/8) height/8 threads.
     */
     int threads = cm->yph/8;
-    dct_quantize<<<1, threads>>>(image->Y, cm->curframe->predicted->Y, cm->padw[Y_COMPONENT],
-        cm->padh[Y_COMPONENT], cm->curframe->residuals->Ydct,
-        cm->quanttbl[Y_COMPONENT]);
 
+    dct_quantize<<<3, threads>>>(image, cm);//->curframe->predicted->Y, cm->padw[Y_COMPONENT], cm->padh[Y_COMPONENT], cm->curframe->residuals->Ydct, cm->quanttbl[Y_COMPONENT]);
 
-    dct_quantize<<<1, threads>>>(image->U, cm->curframe->predicted->U, cm->padw[U_COMPONENT],
-        cm->padh[U_COMPONENT], cm->curframe->residuals->Udct,
-        cm->quanttbl[U_COMPONENT]);
-
-
-    dct_quantize<<<1, threads>>>(image->V, cm->curframe->predicted->V, cm->padw[V_COMPONENT],
-        cm->padh[V_COMPONENT], cm->curframe->residuals->Vdct,
-        cm->quanttbl[V_COMPONENT]);
+    //dct_quantize<<<1, threads>>>(image->Y, cm->curframe->predicted->Y, cm->padw[Y_COMPONENT], cm->padh[Y_COMPONENT], cm->curframe->residuals->Ydct, cm->quanttbl[Y_COMPONENT]);
+    //dct_quantize<<<1, threads>>>(image->U, cm->curframe->predicted->U, cm->padw[U_COMPONENT], cm->padh[U_COMPONENT], cm->curframe->residuals->Udct,  cm->quanttbl[U_COMPONENT]);
+    //dct_quantize<<<1, threads>>>(image->V, cm->curframe->predicted->V, cm->padw[V_COMPONENT], cm->padh[V_COMPONENT], cm->curframe->residuals->Vdct,  cm->quanttbl[V_COMPONENT]);
 
     /* Reconstruct frame for inter-prediction */
-    dequantize_idct<<<1, threads>>>(cm->curframe->residuals->Ydct, cm->curframe->predicted->Y,
-        cm->ypw, cm->yph, cm->curframe->recons->Y, cm->quanttbl[Y_COMPONENT]);
 
-    dequantize_idct<<<1, threads>>>(cm->curframe->residuals->Udct, cm->curframe->predicted->U,
-        cm->upw, cm->uph, cm->curframe->recons->U, cm->quanttbl[U_COMPONENT]);
-
-    dequantize_idct<<<1, threads>>>(cm->curframe->residuals->Vdct, cm->curframe->predicted->V,
-        cm->vpw, cm->vph, cm->curframe->recons->V, cm->quanttbl[V_COMPONENT]);
+    //dequantize_idct<<<1, threads>>>(cm->curframe->residuals->Ydct, cm->curframe->predicted->Y, cm->ypw, cm->yph, cm->curframe->recons->Y, cm->quanttbl[Y_COMPONENT]);
+    //dequantize_idct<<<1, threads>>>(cm->curframe->residuals->Udct, cm->curframe->predicted->U, cm->upw, cm->uph, cm->curframe->recons->U, cm->quanttbl[U_COMPONENT]);
+    //dequantize_idct<<<1, threads>>>(cm->curframe->residuals->Vdct, cm->curframe->predicted->V, cm->vpw, cm->vph, cm->curframe->recons->V, cm->quanttbl[V_COMPONENT]);
 
 
 }
@@ -169,6 +159,8 @@ static void c63_encode_image(struct c63_common *cm, yuv_t *image)
     encoder runs a bit faster when all the kernels are nested
     that way we dont need to run cudaDeviceSynchronize() inbetween kernels
   */
+
+
   runner<<<1,1>>>(cm, image);
   cudaDeviceSynchronize();
 

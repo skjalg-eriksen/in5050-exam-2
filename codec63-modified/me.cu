@@ -112,6 +112,7 @@ __global__ static void me_block_8x8(struct c63_common *cm,
 
 __global__ void c63_motion_estimate(struct c63_common *cm)
 {
+
   // Dim3 for Y gridblock, (image rows, image cols
   dim3 Y_dim(cm->mb_rows, cm->mb_cols);
   // Dim3 for UV gridblock, (image rows / 2, image cols / 2)    half of Ydim
@@ -122,22 +123,28 @@ __global__ void c63_motion_estimate(struct c63_common *cm)
 
   /* Luma */
   // Calculate Y, kernel with Ydim and 1 thread
-  me_block_8x8 <<<Y_dim, threads>>>(cm, cm->curframe->orig->Y,
-      cm->refframe->recons->Y, Y_COMPONENT);
-
+  if (threadIdx.x == 0){
+    me_block_8x8 <<<Y_dim, threads>>>(cm, cm->curframe->orig->Y,
+        cm->refframe->recons->Y, Y_COMPONENT);
+  }
   /* Chroma */
   // Calculate U, kernel with UVdim and 1 thread
-  me_block_8x8<<<UV_dim, threads>>> (cm, cm->curframe->orig->U,
-      cm->refframe->recons->U, U_COMPONENT);
+  if (threadIdx.x == 1){
+    me_block_8x8<<<UV_dim, threads>>> (cm, cm->curframe->orig->U,
+        cm->refframe->recons->U, U_COMPONENT);
+  }
 
   // Calculate V, kernel with UVdim and 1 thread
-  me_block_8x8<<<UV_dim, threads>>> (cm, cm->curframe->orig->V,
-      cm->refframe->recons->V, V_COMPONENT);
+  if (threadIdx.x == 2){
+    me_block_8x8<<<UV_dim, threads>>> (cm, cm->curframe->orig->V,
+        cm->refframe->recons->V, V_COMPONENT);
+  }
+
 }
 
 
 /* Motion compensation for 8x8 block */
-__global__ void mc_block_8x8(struct c63_common *cm,
+__global__ static void mc_block_8x8(struct c63_common *cm,
     uint8_t *predicted, uint8_t *ref, int color_component)
 {
   // retrive mb_y and mb_x from indexes.

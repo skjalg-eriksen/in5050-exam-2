@@ -90,18 +90,97 @@ __device__ void dct_quantize_row(uint8_t *in_data, uint8_t *prediction, int w, i
 }
 
 
-__global__ void dct_quantize(uint8_t *in_data, uint8_t *prediction, uint32_t width,
-    uint32_t height, int16_t *out_data, uint8_t *quantization)
+__global__ void dct_quantize(yuv_t *image, struct c63_common *cm)//uint8_t *prediction, uint32_t width, uint32_t height, int16_t *out_data, uint8_t *quantization)
 {
   // get the y value this thread is responsible for
-  int y = blockIdx.x * blockDim.x + threadIdx.x * 8;
-
+  int y = threadIdx.x * 8;
+  int block = blockIdx.x;
   // make sure y is not outside bounds
-  if (y < height){
-    dct_quantize_row(in_data+y*width, prediction+y*width, width, height, out_data+y*width, quantization);
+
+
+  //                              in_data,  prediction                   width                      height                out_data                        quantization
+  //dct_quantize<<<1, threads>>>(image->Y, cm->curframe->predicted->Y, cm->padw[Y_COMPONENT], cm->padh[Y_COMPONENT], cm->curframe->residuals->Ydct, cm->quanttbl[Y_COMPONENT]);
+  //    dequantize_idct_row(in_data+y*width, prediction+y*width, width, height, y, out_data+y*width, quantization);
+
+
+  // DCT IDCT ON Y COMPONENT
+  if (block == 0){
+    // DCT QUANTIZE Y
+    if (y < cm->padh[Y_COMPONENT]){
+      dct_quantize_row(
+              image->Y+y*cm->padw[Y_COMPONENT],                       // in_data
+              cm->curframe->predicted->Y+y*cm->padw[Y_COMPONENT],     // prediction
+              cm->padw[Y_COMPONENT],                                  // width
+              cm->padh[Y_COMPONENT],                                  // height
+              cm->curframe->residuals->Ydct+y*cm->padw[Y_COMPONENT],  // out_data
+              cm->quanttbl[Y_COMPONENT]);                             // quantization
+    }
+   // IDCT DEQUNATIZE Y
+    if (y < cm->yph){
+      dequantize_idct_row(
+              cm->curframe->residuals->Ydct+y*cm->ypw,                // in_data
+              cm->curframe->predicted->Y+y*cm->ypw,                   // prediction
+              cm->ypw,                                                // Width
+              cm->yph,                                                // height
+              y,                                                      // threadidx*8?
+              cm->curframe->recons->Y+y*cm->ypw,                      // out_data
+              cm->quanttbl[Y_COMPONENT]);                             // quantization
+    }
+  }
+  // DCT IDCT ON U COMPONENT
+  else if (block == 1){
+    // DCT QUANTIZE U
+    if (y < cm->padh[U_COMPONENT]){
+        dct_quantize_row(
+                image->U+y*cm->padw[U_COMPONENT],                       // in_data
+                cm->curframe->predicted->U+y*cm->padw[U_COMPONENT],     // prediction
+                cm->padw[U_COMPONENT],                                  // width
+                cm->padh[U_COMPONENT],                                  // height
+                cm->curframe->residuals->Udct+y*cm->padw[U_COMPONENT],  // out_data
+                cm->quanttbl[U_COMPONENT]);                             // quantization
+     }
+
+     // IDCT DEQUNATIZE U
+     if (y < cm->uph){
+        dequantize_idct_row(
+                cm->curframe->residuals->Udct+y*cm->upw,                // in_data
+                cm->curframe->predicted->U+y*cm->upw,                   // prediction
+                cm->upw,                                                // Width
+                cm->uph,                                                // height
+                y,                                                      // threadidx*8?
+                cm->curframe->recons->U+y*cm->upw,                      // out_data
+                cm->quanttbl[U_COMPONENT]);                             // quantization
+    }
+
+  }
+  // DCT IDCT ON V COMPONENT
+  else {
+    // DCT QUANTIZE V
+    if (y < cm->padh[V_COMPONENT]){
+        dct_quantize_row(
+                image->V+y*cm->padw[V_COMPONENT],                       // in_data
+                cm->curframe->predicted->V+y*cm->padw[V_COMPONENT],     // prediction
+                cm->padw[V_COMPONENT],                                  // width
+                cm->padh[V_COMPONENT],                                  // height
+                cm->curframe->residuals->Vdct+y*cm->padw[V_COMPONENT],  // out_data
+                cm->quanttbl[V_COMPONENT]);                             // quantization
+    }
+     // IDCT DEQUNATIZE V
+    if (y <  cm->vph){
+        dequantize_idct_row(
+                cm->curframe->residuals->Vdct+y*cm->vpw,                // in_data
+                cm->curframe->predicted->V+y*cm->vpw,                   // prediction
+                cm->vpw,                                                // Width
+                cm->vph,                                                // height
+                y,                                                      // threadidx*8?
+                cm->curframe->recons->V+y*cm->vpw,                      // out_data
+                cm->quanttbl[V_COMPONENT]);                             // quantization
+    }
   }
 
+  //dct_quantize_row(in_data+y*width, prediction+y*width, width, height, out_data+y*width, quantization);
 }
+
 
 void destroy_frame(struct frame *f)
 {
