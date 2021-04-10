@@ -10,7 +10,7 @@ CFLAGS =  -O1 \
 	  -gencode arch=compute_72,code=compute_72
 CUFLAGS = -rdc=true \
           -gencode arch=compute_72,code=sm_72 \
-	  -gencode arch=compute_72,code=compute_72
+	  -gencode arch=compute_72,code=compute_72 \
 
 LDFLAGS= -lm -gencode arch=compute_72,code=sm_72 \
           -gencode arch=compute_72,code=compute_72 -lnvToolsExt
