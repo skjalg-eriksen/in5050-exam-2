@@ -105,7 +105,7 @@ __global__ static void runner(struct c63_common *cm, yuv_t *image){
 
     /* Motion Estimation and Motion Compensation */
     // run motion estimate kernel with 1 grid, 3 thread one pr Y, U, V
-    c63_motion_estimate<<<1 ,3>>>(cm);
+    c63_motion_estimate_motion_compensate<<<1 ,3>>>(cm);
 
   }
 
