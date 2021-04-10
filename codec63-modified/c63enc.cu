@@ -42,18 +42,15 @@ static yuv_t* read_yuv(FILE *file, struct c63_common *cm)
 
   /* Read Y. The size of Y is the same as the size of the image. The indices
      represents the color component (0 is Y, 1 is U, and 2 is V) */
-  //image->Y = (uint8_t*)calloc(1, cm->padw[Y_COMPONENT]*cm->padh[Y_COMPONENT]);
   cudaMallocManaged(&image->Y, cm->padw[Y_COMPONENT]*cm->padh[Y_COMPONENT]);
   len += fread(image->Y, 1, width*height, file);
 
   /* Read U. Given 4:2:0 chroma sub-sampling, the size is 1/4 of Y
      because (height/2)*(width/2) = (height*width)/4. */
-  //image->U = (uint8_t*)calloc(1, cm->padw[U_COMPONENT]*cm->padh[U_COMPONENT]);
   cudaMallocManaged(&image->U, cm->padw[U_COMPONENT]*cm->padh[U_COMPONENT]);
   len += fread(image->U, 1, (width*height)/4, file);
 
   /* Read V. Given 4:2:0 chroma sub-sampling, the size is 1/4 of Y. */
-  //image->V = (uint8_t*)calloc(1, cm->padw[V_COMPONENT]*cm->padh[V_COMPONENT]);
   cudaMallocManaged(&image->V, cm->padw[V_COMPONENT]*cm->padh[V_COMPONENT]);
   len += fread(image->V, 1, (width*height)/4, file);
 
@@ -95,6 +92,8 @@ static yuv_t* read_yuv(FILE *file, struct c63_common *cm)
 }
 
 
+
+
 /*
   runs motion estimate, motion compensate and dct, idct.
   encoder runs a bit faster when all the kernels are nested
@@ -110,29 +109,17 @@ __global__ static void runner(struct c63_common *cm, yuv_t *image){
 
     // run motion compensate kernel with 1 grid, 1 thread
     /* Motion Compensation */
-    c63_motion_compensate<<<1 ,1>>>(cm);
+    //  c63_motion_compensate<<<1 ,1>>>(cm);
 
   }
 
-
-    /* DCT and Quantization */
     /*
-      amount of threads for each dct, idct kernel. one grid pr kernel and (cm->yph/8) height/8 threads.
+      amount of threads for each dct, idct kernel.
+      one grid pr kernel and (cm->yph/8) height/8 threads.
     */
     int threads = cm->yph/8;
-
-    dct_quantize<<<3, threads>>>(image, cm);//->curframe->predicted->Y, cm->padw[Y_COMPONENT], cm->padh[Y_COMPONENT], cm->curframe->residuals->Ydct, cm->quanttbl[Y_COMPONENT]);
-
-    //dct_quantize<<<1, threads>>>(image->Y, cm->curframe->predicted->Y, cm->padw[Y_COMPONENT], cm->padh[Y_COMPONENT], cm->curframe->residuals->Ydct, cm->quanttbl[Y_COMPONENT]);
-    //dct_quantize<<<1, threads>>>(image->U, cm->curframe->predicted->U, cm->padw[U_COMPONENT], cm->padh[U_COMPONENT], cm->curframe->residuals->Udct,  cm->quanttbl[U_COMPONENT]);
-    //dct_quantize<<<1, threads>>>(image->V, cm->curframe->predicted->V, cm->padw[V_COMPONENT], cm->padh[V_COMPONENT], cm->curframe->residuals->Vdct,  cm->quanttbl[V_COMPONENT]);
-
-    /* Reconstruct frame for inter-prediction */
-
-    //dequantize_idct<<<1, threads>>>(cm->curframe->residuals->Ydct, cm->curframe->predicted->Y, cm->ypw, cm->yph, cm->curframe->recons->Y, cm->quanttbl[Y_COMPONENT]);
-    //dequantize_idct<<<1, threads>>>(cm->curframe->residuals->Udct, cm->curframe->predicted->U, cm->upw, cm->uph, cm->curframe->recons->U, cm->quanttbl[U_COMPONENT]);
-    //dequantize_idct<<<1, threads>>>(cm->curframe->residuals->Vdct, cm->curframe->predicted->V, cm->vpw, cm->vph, cm->curframe->recons->V, cm->quanttbl[V_COMPONENT]);
-
+    /* DCT and Quantization AND Reconstruct frame for inter-prediction  */
+    dct_quantize_dequantize_idct<<<3, threads>>>(image, cm);
 
 }
 
@@ -159,10 +146,9 @@ static void c63_encode_image(struct c63_common *cm, yuv_t *image)
     encoder runs a bit faster when all the kernels are nested
     that way we dont need to run cudaDeviceSynchronize() inbetween kernels
   */
-
-
   runner<<<1,1>>>(cm, image);
   cudaDeviceSynchronize();
+
 
   /* Function dump_image(), found in common.c, can be used here to check if the
      prediction is correct */

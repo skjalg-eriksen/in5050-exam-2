@@ -27,8 +27,7 @@ __global__ static void me_block_8x8(struct c63_common *cm,
   int index_x = threadIdx.x;
   int index_y = threadIdx.y;
 
-  struct macroblock *mb =
-    &cm->curframe->mbs[color_component][mb_y*cm->padw[color_component]/8+mb_x];
+  struct macroblock *mb  = &cm->curframe->mbs[color_component][mb_y*cm->padw[color_component]/8+mb_x];
 
 
   int range = cm->me_search_range;
@@ -62,43 +61,47 @@ __global__ static void me_block_8x8(struct c63_common *cm,
   int best_sad = INT_MAX;
   int sad;
 
+  top += 8/(bottom-top) * threadIdx.z;
+  bottom -= 8/(bottom-top) * (8-threadIdx.z);
+  left += 8/(right-left) * threadIdx.z;
+  right -= 8/(right-left) * (8-threadIdx.z);
 
-
-  for (y = top; y < bottom; ++y)
+  for (y = top; y < bottom; y++)
   {
-    for (x = left; x < right; ++x)
+    for (x = left; x < right; x++)
     {
-        sad = 0;
-        // update block pointers
-        block1 = orig + my*w+mx;
-        block2 = ref + y*w+x;
+      //printf("top: %5d\t bottom %5d\t diff %2d\t thread %d\t (%d,%d)\t org diff: %d\n", top, bottom, bottom-top, threadIdx.z, x,y,diff);
+      sad = 0;
+      // update block pointers
+      block1 = orig + my*w+mx;
+      block2 = ref + y*w+x;
 
-        // let each thread calculat their calculate sad value, this replaces sad_block_8x8
-        __syncthreads();
-         s[index_x][index_y] = abs(block2[index_x * w + index_y] - block1[index_x * w + index_y]);
-        __syncthreads();
+      // let each thread calculat their calculate sad value, this replaces sad_block_8x8
+      __syncthreads();
+       s[index_x][index_y] = abs(block2[index_x * w + index_y] - block1[index_x * w + index_y]);
+      __syncthreads();
 
-        // sum and check best sad in thread index_x = 0 index_y =0
-        if (index_x ==0 && index_y == 0) {
+      // sum and check best sad in thread index_x = 0 index_y =0
+      if (index_x ==0 && index_y == 0 && threadIdx.z == 0) {
+        #pragma unroll
+        for (int v = 0; v < 8; ++v)
+        {
           #pragma unroll
-          for (int v = 0; v < 8; ++v)
+          for (int u = 0; u < 8; ++u)
           {
-            #pragma unroll
-            for (int u = 0; u < 8; ++u)
-            {
-              // sum up all the sad values
-              sad += s[u][v];
-            }
-          }
-
-          // do the normal sad check
-          if  (sad< best_sad)
-          {
-            mb->mv_x = x - mx;
-            mb->mv_y = y - my;
-            best_sad = sad;
+            // sum up all the sad values
+            sad += s[u][v];
           }
         }
+
+        // do the normal sad check
+        if  (sad< best_sad)
+        {
+          mb->mv_x = x - mx;
+          mb->mv_y = y - my;
+          best_sad = sad;
+        }
+      }
     }
   }
 
@@ -107,49 +110,15 @@ __global__ static void me_block_8x8(struct c63_common *cm,
      //if (index ==0)  printf("(%d,%d) Using motion vector (%d, %d) with SAD %d\n",mb_x, mb_y, mb->mv_x, mb->mv_y, best_sad);
   //return;
   mb->use_mv = 1;
-}
-
-
-__global__ void c63_motion_estimate(struct c63_common *cm)
-{
-
-  // Dim3 for Y gridblock, (image rows, image cols
-  dim3 Y_dim(cm->mb_rows, cm->mb_cols);
-  // Dim3 for UV gridblock, (image rows / 2, image cols / 2)    half of Ydim
-  dim3 UV_dim(cm->mb_rows / 2, cm->mb_cols / 2);
-
-  // 8 by 8 threads (64 total) ine each grid block
-  dim3 threads(8,8);
-
-  /* Luma */
-  // Calculate Y, kernel with Ydim and 1 thread
-  if (threadIdx.x == 0){
-    me_block_8x8 <<<Y_dim, threads>>>(cm, cm->curframe->orig->Y,
-        cm->refframe->recons->Y, Y_COMPONENT);
-  }
-  /* Chroma */
-  // Calculate U, kernel with UVdim and 1 thread
-  if (threadIdx.x == 1){
-    me_block_8x8<<<UV_dim, threads>>> (cm, cm->curframe->orig->U,
-        cm->refframe->recons->U, U_COMPONENT);
-  }
-
-  // Calculate V, kernel with UVdim and 1 thread
-  if (threadIdx.x == 2){
-    me_block_8x8<<<UV_dim, threads>>> (cm, cm->curframe->orig->V,
-        cm->refframe->recons->V, V_COMPONENT);
-  }
 
 }
-
-
 /* Motion compensation for 8x8 block */
 __global__ static void mc_block_8x8(struct c63_common *cm,
     uint8_t *predicted, uint8_t *ref, int color_component)
 {
   // retrive mb_y and mb_x from indexes.
-  int mb_y = blockIdx.x * blockDim.x + threadIdx.x;
-  int mb_x = blockIdx.y * blockDim.y + threadIdx.y;
+  int mb_y = blockIdx.x;
+  int mb_x = blockIdx.y;
 
   struct macroblock *mb =
     &cm->curframe->mbs[color_component][mb_y*cm->padw[color_component]/8+mb_x];
@@ -175,6 +144,50 @@ __global__ static void mc_block_8x8(struct c63_common *cm,
   }
 }
 
+__global__ void c63_motion_estimate(struct c63_common *cm)
+{
+
+  // Dim3 for Y gridblock, (image rows, image cols
+  dim3 Y_dim(cm->mb_rows, cm->mb_cols);
+  // Dim3 for UV gridblock, (image rows / 2, image cols / 2)    half of Ydim
+  dim3 UV_dim(cm->mb_rows / 2, cm->mb_cols / 2);
+
+  // 8 by 8 threads (64 total) ine each grid block
+  dim3 threads(8,8,8);
+
+  /* Luma */
+  // Calculate Y, kernel with Ydim and 1 thread
+  if (threadIdx.x == 0){
+    me_block_8x8 <<<Y_dim, threads>>>(cm, cm->curframe->orig->Y,
+        cm->refframe->recons->Y, Y_COMPONENT);
+    mc_block_8x8 <<<Y_dim, 1>>> (cm, cm->curframe->predicted->Y,
+        cm->refframe->recons->Y, Y_COMPONENT);
+  }
+
+  /* Chroma */
+  // Calculate U, kernel with UVdim and 1 thread
+  if (threadIdx.x == 1){
+    me_block_8x8<<<UV_dim, threads>>> (cm, cm->curframe->orig->U,
+        cm->refframe->recons->U, U_COMPONENT);
+
+    mc_block_8x8 <<<UV_dim, 1>>>  (cm, cm->curframe->predicted->U,
+        cm->refframe->recons->U, U_COMPONENT);
+  }
+
+  // Calculate V, kernel with UVdim and 1 thread
+  if (threadIdx.x == 2){
+    me_block_8x8<<<UV_dim, threads>>> (cm, cm->curframe->orig->V,
+        cm->refframe->recons->V, V_COMPONENT);
+
+    mc_block_8x8 <<<UV_dim, 1>>>  (cm, cm->curframe->predicted->V,
+        cm->refframe->recons->V, V_COMPONENT);
+  }
+
+}
+
+
+
+
 __global__ void c63_motion_compensate(struct c63_common *cm)
 {
   // Dim3 for Y, (image rows, image cols)
@@ -184,12 +197,15 @@ __global__ void c63_motion_compensate(struct c63_common *cm)
 
   /* Luma */
   // Calculate Y, kernel with Ydim and 1 thread
-  mc_block_8x8 <<<Y_dim, 1>>> (cm, cm->curframe->predicted->Y, cm->refframe->recons->Y, Y_COMPONENT);
+  mc_block_8x8 <<<Y_dim, 1>>> (cm, cm->curframe->predicted->Y,
+     cm->refframe->recons->Y, Y_COMPONENT);
 
   /* Chroma */
   // Calculate U, kernel with UVdim and 1 thread
-  mc_block_8x8 <<<UV_dim, 1>>>  (cm, cm->curframe->predicted->U, cm->refframe->recons->U, U_COMPONENT);
+  mc_block_8x8 <<<UV_dim, 1>>>  (cm, cm->curframe->predicted->U,
+     cm->refframe->recons->U, U_COMPONENT);
   // Calculate V, kernel with UVdim and 1 thread
-  mc_block_8x8 <<<UV_dim, 1>>>  (cm, cm->curframe->predicted->V, cm->refframe->recons->V, V_COMPONENT);
+  mc_block_8x8 <<<UV_dim, 1>>>  (cm, cm->curframe->predicted->V,
+     cm->refframe->recons->V, V_COMPONENT);
 
 }
