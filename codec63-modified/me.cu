@@ -77,7 +77,7 @@ __global__ static void me_block_8x8(struct c63_common *cm,
       __syncthreads();
 
 
-
+      // reduce along y axis
       if(index_y < 4){
         s[index_x][index_y] += s[index_x][7-index_y];
       }
@@ -91,7 +91,7 @@ __global__ static void me_block_8x8(struct c63_common *cm,
       }
       __syncthreads();
 
-
+      // reduce along x axis
       if(index_x < 4  && index_y == 0){
         s[index_x][0] += s[7-index_x][0];
       }
@@ -101,23 +101,14 @@ __global__ static void me_block_8x8(struct c63_common *cm,
       }
       __syncthreads();
       if (index_x < 1 && index_y == 0){
-        s[0][0] += s[1][0];
+        s[index_x][index_y] += s[1][index_y];
       }
 
 
 
       // sum and check best sad in thread index_x = 0 index_y =0
       if (index_x ==0 && index_y == 0) {
-      /*  #pragma unroll
-        for (int v = 0; v < 8; ++v)
-        {
-          #pragma unroll
-          for (int u = 0; u < 8; ++u)
-          {
-            // sum up all the sad values
-            sad += s[u][v];
-          }
-        }*/
+        // get sum sad value
         sad = s[0][0];
 
         // do the normal sad check
@@ -186,7 +177,7 @@ __global__ void c63_motion_estimate(struct c63_common *cm)
   if (threadIdx.x == 0){
     me_block_8x8 <<<Y_dim, threads>>>(cm, cm->curframe->orig->Y,
         cm->refframe->recons->Y, Y_COMPONENT);
-  //  mc_block_8x8 <<<Y_dim, 1>>> (cm, cm->curframe->predicted->Y,        cm->refframe->recons->Y, Y_COMPONENT);
+    mc_block_8x8 <<<Y_dim, 1>>> (cm, cm->curframe->predicted->Y,        cm->refframe->recons->Y, Y_COMPONENT);
   }
 
   /* Chroma */
@@ -194,14 +185,14 @@ __global__ void c63_motion_estimate(struct c63_common *cm)
   if (threadIdx.x == 1){
     me_block_8x8<<<UV_dim, threads>>> (cm, cm->curframe->orig->U,
         cm->refframe->recons->U, U_COMPONENT);
-    //mc_block_8x8 <<<UV_dim, 1>>>  (cm, cm->curframe->predicted->U,        cm->refframe->recons->U, U_COMPONENT);
+    mc_block_8x8 <<<UV_dim, 1>>>  (cm, cm->curframe->predicted->U,        cm->refframe->recons->U, U_COMPONENT);
   }
 
   // Calculate V, kernel with UVdim and 1 thread
   if (threadIdx.x == 2){
     me_block_8x8<<<UV_dim, threads>>> (cm, cm->curframe->orig->V,
         cm->refframe->recons->V, V_COMPONENT);
-  //  mc_block_8x8 <<<UV_dim, 1>>>  (cm, cm->curframe->predicted->V,        cm->refframe->recons->V, V_COMPONENT);
+    mc_block_8x8 <<<UV_dim, 1>>>  (cm, cm->curframe->predicted->V,        cm->refframe->recons->V, V_COMPONENT);
   }
 
 }

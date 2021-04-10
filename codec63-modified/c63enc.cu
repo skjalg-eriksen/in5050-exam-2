@@ -103,13 +103,9 @@ __global__ static void runner(struct c63_common *cm, yuv_t *image){
   if (!cm->curframe->keyframe)
   {
 
-    /* Motion Estimation */
-    // run motion estimate kernel with 1 grid, 1 thread
+    /* Motion Estimation and Motion Compensation */
+    // run motion estimate kernel with 1 grid, 3 thread one pr Y, U, V
     c63_motion_estimate<<<1 ,3>>>(cm);
-
-    // run motion compensate kernel with 1 grid, 1 thread
-    /* Motion Compensation */
-    c63_motion_compensate<<<1 ,1>>>(cm);
 
   }
 
@@ -148,7 +144,7 @@ static void c63_encode_image(struct c63_common *cm, yuv_t *image)
   */
   runner<<<1,1>>>(cm, image);
   cudaDeviceSynchronize();
-
+  //printf("SEARCH RANGE %d\n", cm->me_search_range);
   /* Function dump_image(), found in common.c, can be used here to check if the
      prediction is correct */
 
