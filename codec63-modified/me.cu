@@ -61,11 +61,6 @@ __global__ static void me_block_8x8(struct c63_common *cm,
   int best_sad = INT_MAX;
   int sad;
 
-  top += 8/(bottom-top) * threadIdx.z;
-  bottom -= 8/(bottom-top) * (8-threadIdx.z);
-  left += 8/(right-left) * threadIdx.z;
-  right -= 8/(right-left) * (8-threadIdx.z);
-
   for (y = top; y < bottom; y++)
   {
     for (x = left; x < right; x++)
@@ -153,7 +148,7 @@ __global__ void c63_motion_estimate(struct c63_common *cm)
   dim3 UV_dim(cm->mb_rows / 2, cm->mb_cols / 2);
 
   // 8 by 8 threads (64 total) ine each grid block
-  dim3 threads(8,8,8);
+  dim3 threads(8,8);
 
   /* Luma */
   // Calculate Y, kernel with Ydim and 1 thread
